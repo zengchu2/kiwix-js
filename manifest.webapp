@@ -1,5 +1,5 @@
 {
-  "version": "2.0-beta",
+  "version": "2.1-WIP",
   "name": "Kiwix",
   "description": "Offline Wikipedia Viewer, and more",
   "launch_path": "/www/index.html",
@@ -20,7 +20,7 @@
   "default_locale": "en",
   "permissions": {
     "device-storage:sdcard": {
-      "description": "Required to read wikipedia archives",
+      "description": "Required to read Wikipedia archives",
       "access": "readonly"
     },
     "geolocation": {

@@ -4,20 +4,20 @@
  * Copyright 2013-2014 Mossroy and contributors
  * License GPL v3:
  * 
- * This file is part of Evopedia.
+ * This file is part of Kiwix.
  * 
- * Evopedia is free software: you can redistribute it and/or modify
+ * Kiwix is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  * 
- * Evopedia is distributed in the hope that it will be useful,
+ * Kiwix is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Evopedia (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
+ * along with Kiwix (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
  */
 'use strict';
 define(['q'], function(q) {
@@ -78,16 +78,16 @@ define(['q'], function(q) {
     }
     
     /**
-     * Generates an array of Titles, where all duplicates have been removed
-     * (it also sorts the titles)
+     * Generates an array of DirEntry, where all duplicates (same title) have been removed
+     * (it also sorts them on their title)
      * 
-     * @param {Array.<Title>} array of Titles
-     * @returns {Array.<Title>} same array of Titles, without duplicates
+     * @param {Array.<DirEntry>} array of DirEntry
+     * @returns {Array.<DirEntry>} same array of DirEntry, without duplicates
      */
-    function removeDuplicateTitlesInArray(array) {
-        array.sort(function(titleA, titleB) {
-            if (titleA.title < titleB.title) return -1;
-            if (titleA.title > titleB.title) return 1;
+    function removeDuplicateTitlesInDirEntryArray(array) {
+        array.sort(function(dirEntryA, dirEntryB) {
+            if (dirEntryA.title < dirEntryB.title) return -1;
+            if (dirEntryA.title > dirEntryB.title) return 1;
             return 0;
         });
         for(var i = 1; i < array.length; ){
@@ -106,8 +106,8 @@ define(['q'], function(q) {
      * It is optimized for small arrays.
      * Source : http://codereview.stackexchange.com/questions/60128/removing-duplicates-from-an-array-quickly
      * 
-     * @param {Array.<Title>} array of String
-     * @returns {Array.<Title>} same array of Strings, without duplicates
+     * @param {Array} array of String
+     * @returns {Array} same array of Strings, without duplicates
      */
     function removeDuplicateStringsInSmallArray(array) {
         var unique = [];
@@ -316,7 +316,7 @@ define(['q'], function(q) {
         ucFirstLetter: ucFirstLetter,
         lcFirstLetter: lcFirstLetter,
         ucEveryFirstLetter: ucEveryFirstLetter,
-        removeDuplicateTitlesInArray: removeDuplicateTitlesInArray,
+        removeDuplicateTitlesInDirEntryArray: removeDuplicateTitlesInDirEntryArray,
         removeDuplicateStringsInSmallArray: removeDuplicateStringsInSmallArray,
         readIntegerFrom4Bytes: readIntegerFrom4Bytes,
         readIntegerFrom2Bytes : readIntegerFrom2Bytes,

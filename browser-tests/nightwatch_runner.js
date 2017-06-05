@@ -4,7 +4,7 @@ module.exports = {
             .url('http://localhost:8080/tests.html')
             .waitForElementVisible('#qunit-testresult', 10000)
             .pause(10000);
-        browser.expect.element('#qunit-testresult').text.to.contain('Tests completed in');
+        browser.expect.element('#qunit-testresult').text.to.contain('tests completed in');
         browser.expect.element('#qunit-testresult .failed').text.to.equal('0');
         browser.expect.element('#qunit-testresult .passed').text.not.to.equal('0');
         browser.end();
@@ -16,12 +16,14 @@ module.exports = {
             .execute(function() {
                 window.setRemoteArchive('https://kiwix.github.io/kiwix-html5/tests/wikipedia_en_ray_charles_2015-06.zim');
             })
-            .waitForElementVisible('#searchTitles', 20000)
+            .waitForElementVisible('#formArticleSearch', 20000)
+            .waitForElementVisible('#searchArticles', 20000)
             .setValue('#prefix', "Ray")
-            .click('#searchTitles')
-            .waitForElementVisible('#titleList', 20000)
+            .click('#searchArticles')
+            .waitForElementVisible('#articleList', 20000)
             .useXpath()
-            .click("//div[@id='titleList']/a[text()='Ray Charles']")
+            .waitForElementVisible("//div[@id='articleList']/a[text()='Ray Charles']", 20000)
+            .click("//div[@id='articleList']/a[text()='Ray Charles']")
             .useCss()
             .frame('articleContent')
                 .waitForElementPresent('#mweQ', 2000000)

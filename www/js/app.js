@@ -5,20 +5,20 @@
  * Copyright 2013-2014 Mossroy and contributors
  * License GPL v3:
  * 
- * This file is part of Evopedia.
+ * This file is part of Kiwix.
  * 
- * Evopedia is free software: you can redistribute it and/or modify
+ * Kiwix is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  * 
- * Evopedia is distributed in the hope that it will be useful,
+ * Kiwix is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  * 
  * You should have received a copy of the GNU General Public License
- * along with Evopedia (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
+ * along with Kiwix (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
  */
 
 'use strict';
@@ -26,8 +26,8 @@
 // This uses require.js to structure javascript:
 // http://requirejs.org/docs/api.html#define
 
-define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osabstraction'],
- function($, backend, util, uiUtil, cookies, geometry, osabstraction) {
+define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFilesystemAccess'],
+ function($, zimArchiveLoader, util, uiUtil, cookies, abstractFilesystemAccess) {
      
     // Disable any eval() call in jQuery : it's disabled by CSP in any packaged application
     // It happens on some wiktionary archives, because there is some javascript inside the html article
@@ -39,35 +39,15 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     };
     
     /**
-     * Maximum number of titles to display in a search
+     * Maximum number of articles to display in a search
      * @type Integer
      */
     var MAX_SEARCH_RESULT_SIZE = 50;
 
     /**
-     * Maximum distance (in degrees) where to search for articles around me
-     * In fact, we use a square around the user, not a circle
-     * This square has a length of twice the value of this constant
-     * One degree is ~111 km at the equator
-     * @type Float
-     */
-    var DEFAULT_MAX_DISTANCE_ARTICLES_NEARBY = 0.01;
-
-    /**
-     * @type LocalArchive|ZIMArchive
+     * @type ZIMArchive
      */
     var selectedArchive = null;
-    
-    /**
-     * This max distance has a default value, but the user can make it change
-     * @type Number
-     */
-    var maxDistanceArticlesNearbySearch = DEFAULT_MAX_DISTANCE_ARTICLES_NEARBY;
-    
-    /**
-     * @type point
-     */
-    var currentCoordinates = null;
     
     /**
      * Resize the IFrame height, so that it fills the whole available height in the window
@@ -75,7 +55,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     function resizeIFrame() {
         var height = $(window).outerHeight()
                 - $("#top").outerHeight(true)
-                - $("#titleListWithHeader").outerHeight(true)
+                - $("#articleListWithHeader").outerHeight(true)
                 // TODO : this 5 should be dynamically computed, and not hard-coded
                 - 5;
         $(".articleIFrame").css("height", height + "px");
@@ -84,70 +64,33 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     $(window).resize(resizeIFrame);
     
     // Define behavior of HTML elements
-    $('#searchTitles').on('click', function(e) {
+    $('#searchArticles').on('click', function(e) {
         pushBrowserHistoryState(null, $('#prefix').val());
-        searchTitlesFromPrefix($('#prefix').val());
+        searchDirEntriesFromPrefix($('#prefix').val());
         $("#welcomeText").hide();
         $("#readingArticle").hide();
         $("#articleContent").hide();
-        $('#geolocationProgress').hide();
         if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
             $('#navbarToggle').click();
         }
     });
-    $('#formTitleSearch').on('submit', function(e) {
-        document.getElementById("searchTitles").click();
+    $('#formArticleSearch').on('submit', function(e) {
+        document.getElementById("searchArticles").click();
         return false;
     });
     $('#prefix').on('keyup', function(e) {
         if (selectedArchive !== null && selectedArchive.isReady()) {
             onKeyUpPrefix(e);
-            $('#geolocationProgress').hide();
-        }
-    });
-    $("#btnArticlesNearby").on("click", function(e) {
-        if (selectedArchive.hasCoordinates()) {
-            $('#prefix').val("");
-            searchTitlesNearby();
-            $("#welcomeText").hide();
-            $("#readingArticle").hide();
-            if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
-                $('#navbarToggle').click();
-            }
-        }
-        else {
-            alert("There are no usable coordinates in this archive. This feature is only available on deprecated Evopedia archives for now");
-        }
-    });
-    $("#btnEnlargeMaxDistance").on("click", function(e) {
-        maxDistanceArticlesNearbySearch = maxDistanceArticlesNearbySearch * 2 ;
-        searchTitlesNearbyGivenCoordinates(currentCoordinates.y, currentCoordinates.x, maxDistanceArticlesNearbySearch);
-        $("#welcomeText").hide();
-        $("#readingArticle").hide();
-        if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
-            $('#navbarToggle').click();
-        }
-    });
-    $("#btnReduceMaxDistance").on("click", function(e) {
-        maxDistanceArticlesNearbySearch = maxDistanceArticlesNearbySearch / 2 ;
-        searchTitlesNearbyGivenCoordinates(currentCoordinates.y, currentCoordinates.x, maxDistanceArticlesNearbySearch);
-        $("#welcomeText").hide();
-        $("#readingArticle").hide();
-        if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
-            $('#navbarToggle').click();
         }
     });
     $("#btnRandomArticle").on("click", function(e) {
         $('#prefix').val("");
         goToRandomArticle();
         $("#welcomeText").hide();
-        $('#titleList').hide();
-        $('#titleListHeaderMessage').hide();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
+        $('#articleList').hide();
+        $('#articleListHeaderMessage').hide();
         $("#readingArticle").hide();
-        $('#geolocationProgress').hide();
-        $('#searchingForTitles').hide();
+        $('#searchingForArticles').hide();
         if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
             $('#navbarToggle').click();
         }
@@ -186,23 +129,20 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
         // Show the selected content in the page
         $('#about').hide();
         $('#configuration').hide();
-        $('#formTitleSearch').show();
+        $('#formArticleSearch').show();
         $("#welcomeText").show();
-        $('#titleList').show();
-        $('#titleListHeaderMessage').show();
+        $('#articleList').show();
+        $('#articleListHeaderMessage').show();
         $('#articleContent').show();
         // Give the focus to the search field, and clean up the page contents
         $("#prefix").val("");
         $('#prefix').focus();
-        $("#titleList").empty();
-        $('#titleListHeaderMessage').empty();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
+        $("#articleList").empty();
+        $('#articleListHeaderMessage').empty();
         $("#readingArticle").hide();
         $("#articleContent").hide();
-        $('#geolocationProgress').hide();
         $("#articleContent").contents().empty();
-        $('#searchingForTitles').hide();
+        $('#searchingForArticles').hide();
         if (selectedArchive !== null && selectedArchive.isReady()) {
             $("#welcomeText").hide();
             goToMainArticle();
@@ -220,17 +160,14 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
         // Show the selected content in the page
         $('#about').hide();
         $('#configuration').show();
-        $('#formTitleSearch').hide();
+        $('#formArticleSearch').hide();
         $("#welcomeText").hide();
-        $('#titleList').hide();
-        $('#titleListHeaderMessage').hide();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
+        $('#articleList').hide();
+        $('#articleListHeaderMessage').hide();
         $("#readingArticle").hide();
         $("#articleContent").hide();
-        $('#geolocationProgress').hide();
         $('#articleContent').hide();
-        $('#searchingForTitles').hide();
+        $('#searchingForArticles').hide();
         refreshAPIStatus();
         return false;
     });
@@ -245,24 +182,20 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
         // Show the selected content in the page
         $('#about').show();
         $('#configuration').hide();
-        $('#formTitleSearch').hide();
+        $('#formArticleSearch').hide();
         $("#welcomeText").hide();
-        $('#titleList').hide();
-        $('#titleListHeaderMessage').hide();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
+        $('#articleList').hide();
+        $('#articleListHeaderMessage').hide();
         $("#readingArticle").hide();
         $("#articleContent").hide();
-        $('#geolocationProgress').hide();
         $('#articleContent').hide();
-        $('#searchingForTitles').hide();
+        $('#searchingForArticles').hide();
         return false;
     });
     $('input:radio[name=contentInjectionMode]').on('change', function(e) {
         if (checkWarnServiceWorkerMode(this.value)) {
             // Do the necessary to enable or disable the Service Worker
             setContentInjectionMode(this.value);
-            checkSelectedArchiveCompatibilityWithInjectionMode();
         }
         else {
             setContentInjectionMode('jquery');
@@ -374,20 +307,6 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     }
     
     /**
-     * Checks if the archive selected by the user is compatible
-     * with the injection mode, and warn the user if it's not
-     * @returns {Boolean} true if they're compatible
-     */
-    function checkSelectedArchiveCompatibilityWithInjectionMode() {
-        if (selectedArchive && selectedArchive.needsWikimediaCSS() && contentInjectionMode === 'serviceworker') {
-            alert('You seem to want to use ServiceWorker mode for an Evopedia archive : this is not supported. Please use the JQuery mode or use a ZIM file');
-            $("#btnConfigure").click();
-            return false;
-        }
-        return true;
-    }
-    
-    /**
      * If the ServiceWorker mode is selected, warn the user before activating it
      * @param chosenContentInjectionMode The mode that the user has chosen
      */
@@ -399,7 +318,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
             // If the focus is on the search field, we have to move it,
             // else the keyboard hides the message
             if ($("#prefix").is(":focus")) {
-                $("searchTitles").focus();
+                $("searchArticles").focus();
             }
             if (confirm("The 'Service Worker' mode is still UNSTABLE for now."
                 + " It happens that the application needs to be reinstalled (or the ServiceWorker manually removed)."
@@ -463,7 +382,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     
     /**
      * 
-     * @type Array.<StorageFirefoxOS|StoragePhoneGap>
+     * @type Array.<StorageFirefoxOS>
      */
     var storages = [];
     function searchForArchivesInPreferencesOrStorage() {
@@ -481,19 +400,13 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
         // If DeviceStorage is available, we look for archives in it
         $("#btnConfigure").click();
         $('#scanningForArchives').show();
-        backend.scanForArchives(storages, populateDropDownListOfArchives);
+        zimArchiveLoader.scanForArchives(storages, populateDropDownListOfArchives);
     }
 
     if ($.isFunction(navigator.getDeviceStorages)) {
         // The method getDeviceStorages is available (FxOS>=1.1)
         storages = $.map(navigator.getDeviceStorages("sdcard"), function(s) {
-            return new osabstraction.StorageFirefoxOS(s);
-        });
-    } else if ($.isFunction(window.requestFileSystem)) {
-        // The requestFileSystem is available (Cordova)
-        window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, function(fs) {
-            storages[0] = new osabstraction.StoragePhoneGap(fs);
-            searchForArchivesInPreferencesOrStorage();
+            return new abstractFilesystemAccess.StorageFirefoxOS(s);
         });
     }
 
@@ -520,11 +433,8 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     // Display the article when the user goes back in the browser history
     window.onpopstate = function(event) {
         if (event.state) {
-            var titleName = event.state.titleName;
+            var title = event.state.title;
             var titleSearch = event.state.titleSearch;
-            var latitude = event.state.latitude;
-            var longitude = event.state.longitude;
-            var maxDistance = event.state.maxDistance;
             
             $('#prefix').val("");
             $("#welcomeText").hide();
@@ -532,46 +442,24 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
             if ($('#navbarToggle').is(":visible") && $('#liHomeNav').is(':visible')) {
                 $('#navbarToggle').click();
             }
-            $('#searchingForTitles').hide();
+            $('#searchingForArticles').hide();
             $('#configuration').hide();
-            $('#titleList').hide();
-            $('#titleListHeaderMessage').hide();
-            $('#suggestEnlargeMaxDistance').hide();
-            $('#suggestReduceMaxDistance').hide();
+            $('#articleList').hide();
+            $('#articleListHeaderMessage').hide();
             $('#articleContent').contents().empty();
             
-            if (titleName && !(""===titleName)) {
-                goToArticle(titleName);
+            if (title && !(""===title)) {
+                goToArticle(title);
             }
             else if (titleSearch && !(""===titleSearch)) {
                 $('#prefix').val(titleSearch);
-                searchTitlesFromPrefix($('#prefix').val());
-            }
-            else if (latitude && !(""===latitude)) {
-                maxDistanceArticlesNearbySearch = maxDistance;
-                searchTitlesNearbyGivenCoordinates(latitude, longitude, maxDistance);
+                searchDirEntriesFromPrefix($('#prefix').val());
             }
         }
     };
     
     /**
-     * Looks for titles located around the given coordinates, with give maximum distance
-     * @param {Float} latitude
-     * @param {Float} longitude
-     * @param {Number} maxDistance
-     */
-    function searchTitlesNearbyGivenCoordinates(latitude, longitude, maxDistance) {
-        var rectangle = new geometry.rect(
-                longitude - maxDistance,
-                latitude - maxDistance,
-                maxDistance * 2,
-                maxDistance * 2);
-
-        selectedArchive.getTitlesInCoords(rectangle, MAX_SEARCH_RESULT_SIZE, populateListOfTitles);
-    }
-    
-    /**
-     * Populate the drop-down list of titles with the given list
+     * Populate the drop-down list of archives with the given list
      * @param {Array.<String>} archiveDirectories
      */
     function populateDropDownListOfArchives(archiveDirectories) {
@@ -608,7 +496,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
             $("#btnAbout").click();
             var isAndroid = (navigator.userAgent.indexOf("Android") !== -1);
             if (isAndroid) {
-                alert("You seem to be using an Android device. Be aware that there is a bug on Firefox, that prevents finding wikipedia archives in a SD-card (at least on some devices. See about section). Please put the archive in the internal storage if the application can't find it.");
+                alert("You seem to be using an Android device. Be aware that there is a bug on Firefox, that prevents finding Wikipedia archives in a SD-card (at least on some devices. See about section). Please put the archive in the internal storage if the application can't find it.");
             }
         }
     }
@@ -650,12 +538,10 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                         + " storages found with getDeviceStorages instead of 1");
                 }
             }
-            selectedArchive = backend.loadArchiveFromDeviceStorage(selectedStorage, archiveDirectory, function (archive) {
+            selectedArchive = zimArchiveLoader.loadArchiveFromDeviceStorage(selectedStorage, archiveDirectory, function (archive) {
                 cookies.setItem("lastSelectedArchive", archiveDirectory, Infinity);
-                if (checkSelectedArchiveCompatibilityWithInjectionMode()) {
-                    // The archive is set : go back to home page to start searching
-                    $("#btnHome").click();
-                }
+                // The archive is set : go back to home page to start searching
+                $("#btnHome").click();
             });
             
         }
@@ -670,13 +556,10 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     }
 
     function setLocalArchiveFromFileList(files) {
-        selectedArchive = backend.loadArchiveFromFiles(files, function(archive){
-            if (checkSelectedArchiveCompatibilityWithInjectionMode()) {
-                // The archive is set : go back to home page to start searching
-                $("#btnHome").click();
-            }
+        selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
+            // The archive is set : go back to home page to start searching
+            $("#btnHome").click();
         });
-        
     }
     /**
      * Sets the localArchive from the File selects populated by user
@@ -715,7 +598,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
         window.timeoutKeyUpPrefix = window.setTimeout(function() {
             var prefix = $("#prefix").val();
             if (prefix && prefix.length>0) {
-                $('#searchTitles').click();
+                $('#searchArticles').click();
             }
         }
         ,500);
@@ -723,21 +606,21 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
 
 
     /**
-     * Search the index for titles that start with the given prefix (implemented
+     * Search the index for DirEntries with title that start with the given prefix (implemented
      * with a binary search inside the index file)
      * @param {String} prefix
      */
-    function searchTitlesFromPrefix(prefix) {
-        $('#searchingForTitles').show();
+    function searchDirEntriesFromPrefix(prefix) {
+        $('#searchingForArticles').show();
         $('#configuration').hide();
         $('#articleContent').contents().empty();
         if (selectedArchive !== null && selectedArchive.isReady()) {
-            selectedArchive.findTitlesWithPrefix(prefix.trim(), MAX_SEARCH_RESULT_SIZE, populateListOfTitles);
+            selectedArchive.findDirEntriesWithPrefix(prefix.trim(), MAX_SEARCH_RESULT_SIZE, populateListOfArticles);
         } else {
-            $('#searchingForTitles').hide();
+            $('#searchingForArticles').hide();
             // We have to remove the focus from the search field,
             // so that the keyboard does not stay above the message
-            $("#searchTitles").focus();
+            $("#searchArticles").focus();
             alert("Archive not set : please select an archive");
             $("#btnConfigure").click();
         }
@@ -745,134 +628,79 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
 
   
     /**
-     * Display the list of titles with the given array of titles
-     * @param {Array.<Title>} titleArray
-     * @param {Integer} maxTitles
-     * @param {Boolean} isNearbySearchSuggestions : it set to true, allow suggestions to
-     *  reduce or enlarge the distance where to look for articles nearby
+     * Display the list of articles with the given array of DirEntry
+     * @param {Array.<DirEntry>} dirEntryArray
+     * @param {Integer} maxArticles
      */
-    function populateListOfTitles(titleArray, maxTitles, isNearbySearchSuggestions) {
-        var currentLatitude;
-        var currentLongitude;
-        if (currentCoordinates) {
-            currentLatitude = currentCoordinates.y;
-            currentLongitude = currentCoordinates.x;
-        }
-        
-        var titleListHeaderMessageDiv = $('#titleListHeaderMessage');
-        var nbTitles = 0;
-        if (titleArray) {
-            nbTitles = titleArray.length;
+    function populateListOfArticles(dirEntryArray, maxArticles) {       
+        var articleListHeaderMessageDiv = $('#articleListHeaderMessage');
+        var nbDirEntry = 0;
+        if (dirEntryArray) {
+            nbDirEntry = dirEntryArray.length;
         }
 
         var message;
-        if (maxTitles >= 0 && nbTitles >= maxTitles) {
-            message = maxTitles + " first titles below (refine your search).";
+        if (maxArticles >= 0 && nbDirEntry >= maxArticles) {
+            message = maxArticles + " first articles below (refine your search).";
         }
         else {
-            message = nbTitles + " titles found.";
+            message = nbDirEntry + " articles found.";
         }
-        if (nbTitles === 0) {
-            message = "No titles found.";
+        if (nbDirEntry === 0) {
+            message = "No articles found.";
         }
               
-        titleListHeaderMessageDiv.html(message);
+        articleListHeaderMessageDiv.html(message);
         
-        // In case of nearby search, and too few or too many results,
-        // suggest the user to change the max Distance
-        if (isNearbySearchSuggestions && nbTitles <= maxTitles * 0.8) {
-            $('#suggestEnlargeMaxDistance').show();
-        }
-        if (isNearbySearchSuggestions && maxTitles >=0 && nbTitles >= maxTitles) {
-            $('#suggestReduceMaxDistance').show();
-        }
 
-        var titleListDiv = $('#titleList');
-        var titleListDivHtml = "";
-        for (var i = 0; i < titleArray.length; i++) {
-            var title = titleArray[i];
+        var articleListDiv = $('#articleList');
+        var articleListDivHtml = "";
+        for (var i = 0; i < dirEntryArray.length; i++) {
+            var dirEntry = dirEntryArray[i];
             
-            var distanceFromHereHtml = "";
-            if (title._geolocation && currentCoordinates) {
-                // If we know the current position and the title position, we display the distance and cardinal direction
-                var distanceKm = (currentCoordinates.distance(title._geolocation) * 6371 * Math.PI / 180).toFixed(1);
-                var cardinalDirection = currentCoordinates.bearing(title._geolocation);
-                distanceFromHereHtml = " (" + distanceKm + " km " + cardinalDirection + ")";
-            }
-            
-            titleListDivHtml += "<a href='#' titleid='" + title.toStringId().replace(/'/g,"&apos;")
-                    + "' class='list-group-item'>" + title.getReadableName()
-                    + distanceFromHereHtml 
-                    + "</a>";
+            articleListDivHtml += "<a href='#' dirEntryId='" + dirEntry.toStringId().replace(/'/g,"&apos;")
+                    + "' class='list-group-item'>" + dirEntry.title + "</a>";
         }
-        titleListDiv.html(titleListDivHtml);
-        $("#titleList a").on("click",handleTitleClick);
-        $('#searchingForTitles').hide();
-        $('#geolocationProgress').hide();
-        $('#titleList').show();
-        $('#titleListHeaderMessage').show();
+        articleListDiv.html(articleListDivHtml);
+        $("#articleList a").on("click",handleTitleClick);
+        $('#searchingForArticles').hide();
+        $('#articleList').show();
+        $('#articleListHeaderMessage').show();
     }
     
-    
     /**
-     * Checks if the small archive is in use
-     * If it is, display a warning message about the hyperlinks not working
-     */
-    function checkSmallArchive() {
-        if (selectedArchive._language === "small" && !cookies.hasItem("warnedSmallArchive")) {
-            // The user selected the "small" archive, which is quite incomplete
-            // So let's display a warning to the user
-            
-            // If the focus is on the search field, we have to move it,
-            // else the keyboard hides the message
-            if ($("#prefix").is(":focus")) {
-                $("searchTitles").focus();
-            }
-            alert("You selected the 'small' archive. This archive is OK for testing, but be aware that very few hyperlinks in the articles will work because it's only a very small subset of the English dump.");
-            // We will not display this warning again for one day
-            cookies.setItem("warnedSmallArchive", true, 86400);
-        }
-    }
-    
-    
-    /**
-     * Handles the click on a title
+     * Handles the click on the title of an article in search results
      * @param {Event} event
      * @returns {Boolean}
      */
-    function handleTitleClick(event) {
-        // If we use the small archive, a warning should be displayed to the user
-        checkSmallArchive();
-        
-        var titleId = event.target.getAttribute("titleId");
-        $("#titleList").empty();
-        $('#titleListHeaderMessage').empty();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
+    function handleTitleClick(event) {       
+        var dirEntryId = event.target.getAttribute("dirEntryId");
+        $("#articleList").empty();
+        $('#articleListHeaderMessage').empty();
         $("#prefix").val("");
-        findTitleFromTitleIdAndLaunchArticleRead(titleId);
-        var title = selectedArchive.parseTitleId(titleId);
-        pushBrowserHistoryState(title.name());
+        findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId);
+        var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
+        pushBrowserHistoryState(dirEntry.url);
         return false;
     }
     
 
     /**
-     * Creates an instance of title from given titleId (including resolving redirects),
+     * Creates an instance of DirEntry from given dirEntryId (including resolving redirects),
      * and call the function to read the corresponding article
-     * @param {String} titleId
+     * @param {String} dirEntryId
      */
-    function findTitleFromTitleIdAndLaunchArticleRead(titleId) {
+    function findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId) {
         if (selectedArchive.isReady()) {
-            var title = selectedArchive.parseTitleId(titleId);
-            $("#articleName").html(title.name());
+            var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
+            $("#articleName").html(dirEntry.title);
             $("#readingArticle").show();
             $("#articleContent").contents().html("");
-            if (title.isRedirect()) {
-                selectedArchive.resolveRedirect(title, readArticle);
+            if (dirEntry.isRedirect()) {
+                selectedArchive.resolveRedirect(dirEntry, readArticle);
             }
             else {
-                readArticle(title);
+                readArticle(dirEntry);
             }
         }
         else {
@@ -881,15 +709,15 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     }
 
     /**
-     * Read the article corresponding to the given title
-     * @param {Title|DirEntry} title
+     * Read the article corresponding to the given dirEntry
+     * @param {DirEntry} dirEntry
      */
-    function readArticle(title) {
-        if (title.isRedirect()) {
-            selectedArchive.resolveRedirect(title, readArticle);
+    function readArticle(dirEntry) {
+        if (dirEntry.isRedirect()) {
+            selectedArchive.resolveRedirect(dirEntry, readArticle);
         }
         else {
-            selectedArchive.readArticle(title, displayArticleInForm);
+            selectedArchive.readArticle(dirEntry, displayArticleInForm);
         }
     }
     
@@ -908,24 +736,24 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
             console.log("the ServiceWorker sent a message on port1", event.data);
             if (event.data.action === "askForContent") {
                 console.log("we are asked for a content : let's try to answer to this message");
-                var titleName = event.data.titleName;
+                var title = event.data.title;
                 var messagePort = event.ports[0];
-                var readFile = function(title) {
-                    if (title === null) {
-                        console.error("Title " + titleName + " not found in archive.");
-                        messagePort.postMessage({'action': 'giveContent', 'titleName' : titleName, 'content': ''});
-                    } else if (title.isRedirect()) {
-                        selectedArchive.resolveRedirect(title, readFile);
+                var readFile = function(dirEntry) {
+                    if (dirEntry === null) {
+                        console.error("Title " + title + " not found in archive.");
+                        messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': ''});
+                    } else if (dirEntry.isRedirect()) {
+                        selectedArchive.resolveRedirect(dirEntry, readFile);
                     } else {
                         console.log("Reading binary file...");
-                        selectedArchive.readBinaryFile(title, function(readableTitleName, content) {
-                            messagePort.postMessage({'action': 'giveContent', 'titleName' : titleName, 'content': content});
+                        selectedArchive.readBinaryFile(dirEntry, function(readableTitle, content) {
+                            messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': content});
                             console.log("content sent to ServiceWorker");
                         });
                     }
                 };
-                selectedArchive.getTitleByName(titleName).then(readFile).fail(function() {
-                    messagePort.postMessage({'action': 'giveContent', 'titleName' : titleName, 'content': new UInt8Array()});
+                selectedArchive.getDirEntryByTitle(title).then(readFile).fail(function() {
+                    messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': new UInt8Array()});
                 });
             }
             else {
@@ -936,7 +764,6 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     
     // Compile some regular expressions needed to modify links
     var regexpImageLink = /^.?\/?[^:]+:(.*)/;
-    var regexpMathImageUrl = /^\/math.*\/([0-9a-f]{32})\.png$/;
     var regexpPath = /^(.*\/)[^\/]+$/;
     // These regular expressions match both relative and absolute URLs
     // Since late 2014, all ZIM files should use relative URLs
@@ -947,22 +774,14 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
      * Display the the given HTML article in the web page,
      * and convert links to javascript calls
      * NB : in some error cases, the given title can be null, and the htmlArticle contains the error message
-     * @param {Title|DirEntry} title
+     * @param {DirEntry} dirEntry
      * @param {String} htmlArticle
      */
-    function displayArticleInForm(title, htmlArticle) {
+    function displayArticleInForm(dirEntry, htmlArticle) {
         $("#readingArticle").hide();
         $("#articleContent").show();
         // Scroll the iframe to its top
         $("#articleContent").contents().scrollTop(0);
-
-        // Apply Mediawiki CSS only when it's an Evopedia archive
-        if (selectedArchive.needsWikimediaCSS() === true) {
-            $('#articleContent').contents().find('head').empty();
-            var currentHref = $(location).attr('href');
-            var currentPath = regexpPath.exec(currentHref)[1];
-            $('#articleContent').contents().find('head').append("<link rel='stylesheet' type='text/css' href='" + currentPath + "css/mediawiki-main.css' id='mediawiki-stylesheet' />");
-        }
 
         // Display the article inside the web page.
         $('#articleContent').contents().find('body').html(htmlArticle);
@@ -1001,7 +820,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                         || util.endsWith(lowerCaseUrl, ".svg")
                         || util.endsWith(lowerCaseUrl, ".jpg")
                         || util.endsWith(lowerCaseUrl, ".jpeg"))) {
-                    // It's a link to a file of wikipedia : change the URL to the online version and open in a new tab
+                    // It's a link to a file of Wikipedia : change the URL to the online version and open in a new tab
                     var onlineWikipediaUrl = url.replace(regexpImageLink, "https://" + selectedArchive._language + ".wikipedia.org/wiki/File:$1");
                     $(this).attr("href", onlineWikipediaUrl);
                     $(this).attr("target", "_blank");
@@ -1019,9 +838,9 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                         url = url.substring(1);
                     }
                     $(this).on('click', function(e) {
-                        var titleName = decodeURIComponent(url);
-                        pushBrowserHistoryState(titleName);
-                        goToArticle(titleName);
+                        var decodedURL = decodeURIComponent(url);
+                        pushBrowserHistoryState(decodedURL);
+                        goToArticle(decodedURL);
                         return false;
                     });
                 }
@@ -1030,27 +849,19 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
             // Load images
             $('#articleContent').contents().find('body').find('img').each(function() {
                 var image = $(this);
-                var m = image.attr("src").match(regexpMathImageUrl);
-                if (m) {
-                    // It's a math image (Evopedia archive)
-                    selectedArchive.loadMathImage(m[1], function(data) {
-                        uiUtil.feedNodeWithBlob(image, 'src', data, 'image/png');
-                    });
-                } else {
-                    // It's a standard image contained in the ZIM file
-                    // We try to find its name (from an absolute or relative URL)
-                    var imageMatch = image.attr("src").match(regexpImageUrl);
-                    if (imageMatch) {
-                        var titleName = decodeURIComponent(imageMatch[1]);
-                        selectedArchive.getTitleByName(titleName).then(function(title) {
-                            selectedArchive.readBinaryFile(title, function (readableTitleName, content) {
-                                // TODO : use the complete MIME-type of the image (as read from the ZIM file)
-                                uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
-                            });
-                        }).fail(function (e) {
-                            console.error("could not find title for image:" + titleName, e);
+                // It's a standard image contained in the ZIM file
+                // We try to find its name (from an absolute or relative URL)
+                var imageMatch = image.attr("src").match(regexpImageUrl);
+                if (imageMatch) {
+                    var title = decodeURIComponent(imageMatch[1]);
+                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                            // TODO : use the complete MIME-type of the image (as read from the ZIM file)
+                            uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
                         });
-                    }
+                    }).fail(function (e) {
+                        console.error("could not find DirEntry for image:" + title, e);
+                    });
                 }
             });
 
@@ -1061,9 +872,9 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                 var hrefMatch = link.attr("href").match(regexpMetadataUrl);
                 if (hrefMatch) {
                     // It's a CSS file contained in the ZIM file
-                    var titleName = uiUtil.removeUrlParameters(decodeURIComponent(hrefMatch[1]));
-                    selectedArchive.getTitleByName(titleName).then(function(title) {
-                        selectedArchive.readBinaryFile(title, function (readableTitleName, content) {
+                    var title = uiUtil.removeUrlParameters(decodeURIComponent(hrefMatch[1]));
+                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
                             var cssContent = util.uintToString(content);
                             // For some reason, Firefox OS does not accept the syntax <link rel="stylesheet" href="data:text/css,...">
                             // So we replace the tag with a <style type="text/css">...</style>
@@ -1088,7 +899,7 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                             link.replaceWith(cssElement);
                         });
                     }).fail(function (e) {
-                        console.error("could not find title for CSS : " + titleName, e);
+                        console.error("could not find DirEntry for CSS : " + title, e);
                     });
                 }
             });
@@ -1101,18 +912,18 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
                 // TODO check that the type of the script is text/javascript or application/javascript
                 if (srcMatch) {
                     // It's a Javascript file contained in the ZIM file
-                    var titleName = uiUtil.removeUrlParameters(decodeURIComponent(srcMatch[1]));
-                    selectedArchive.getTitleByName(titleName).then(function(title) {
-                        if (title === null)
-                            console.log("Error: js file not found: " + titleName);
+                    var title = uiUtil.removeUrlParameters(decodeURIComponent(srcMatch[1]));
+                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                        if (dirEntry === null)
+                            console.log("Error: js file not found: " + title);
                         else
-                            selectedArchive.readBinaryFile(title, function (readableTitleName, content) {
+                            selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
                                 // TODO : I have to disable javascript for now
                                 // var jsContent = encodeURIComponent(util.uintToString(content));
                                 //script.attr("src", 'data:text/javascript;charset=UTF-8,' + jsContent);
                             });
                     }).fail(function (e) {
-                        console.error("could not find title for javascript : " + titleName, e);
+                        console.error("could not find DirEntry for javascript : " + title, e);
                     });
                 }
             });
@@ -1123,34 +934,22 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     /**
      * Changes the URL of the browser page, so that the user might go back to it
      * 
-     * @param {String} titleName
+     * @param {String} title
      * @param {String} titleSearch
-     * @param {Float} latitude
-     * @param {Float} longitude
-     * @param {Float} maxDistance
      */
-    function pushBrowserHistoryState(titleName, titleSearch, latitude, longitude, maxDistance) {
+    function pushBrowserHistoryState(title, titleSearch) {
         var stateObj = {};
         var urlParameters;
         var stateLabel;
-        if (titleName && !(""===titleName)) {
-            stateObj.titleName = titleName;
-            urlParameters = "?title=" + titleName;
-            stateLabel = "Wikipedia Article : " + titleName;
+        if (title && !(""===title)) {
+            stateObj.title = title;
+            urlParameters = "?title=" + title;
+            stateLabel = "Wikipedia Article : " + title;
         }
         else if (titleSearch && !(""===titleSearch)) {
             stateObj.titleSearch = titleSearch;
             urlParameters = "?titleSearch=" + titleSearch;
             stateLabel = "Wikipedia search : " + titleSearch;
-        }
-        else if (latitude) {
-            stateObj.latitude = latitude;
-            stateObj.longitude = longitude;
-            stateObj.maxDistance = maxDistance;
-            urlParameters = "?latitude=" + latitude
-                + "&longitude=" + longitude;
-                + "&maxDistance=" + maxDistance;
-            stateLabel = "Wikipedia nearby search around lat=" + latitude +" ,long=" + longitude;
         }
         else {
             return;
@@ -1161,132 +960,35 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
 
     /**
      * Replace article content with the one of the given title
-     * @param {String} titleName
+     * @param {String} title
      */
-    function goToArticle(titleName) {
-        selectedArchive.getTitleByName(titleName).then(function(title) {
-            if (title === null || title === undefined) {
+    function goToArticle(title) {
+        selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+            if (dirEntry === null || dirEntry === undefined) {
                 $("#readingArticle").hide();
-                alert("Article with title " + titleName + " not found in the archive");
+                alert("Article with title " + title + " not found in the archive");
             }
             else {
-                $("#articleName").html(titleName);
+                $("#articleName").html(title);
                 $("#readingArticle").show();
                 $('#articleContent').contents().find('body').html("");
-                readArticle(title);
+                readArticle(dirEntry);
             }
-        }).fail(function() { alert("Error reading title " + titleName); });
-    }
-       
-    /**
-     * Looks for titles located around where the device is geolocated
-     */
-    function searchTitlesNearby() {
-        $('#searchingForTitles').show();
-        $('#configuration').hide();
-        $('#titleList').hide();
-        $('#titleListHeaderMessage').hide();
-        $('#suggestEnlargeMaxDistance').hide();
-        $('#suggestReduceMaxDistance').hide();
-        $('#articleContent').contents().find('body').empty();
-        if (selectedArchive !== null && selectedArchive.isReady()) {
-            if (navigator.geolocation) {
-                var geo_options = {
-                    enableHighAccuracy: false,
-                    maximumAge: 600000, // 10 minutes
-                    timeout: Infinity 
-                };
-
-                $('#geolocationProgress').html("Trying to find your location...");
-                // This property helps the code to know in which step we currently are
-                $('#geolocationProgress').prop("step","Geolocate");
-                $('#geolocationProgress').show();
-                navigator.geolocation.getCurrentPosition(geo_success, geo_error, geo_options);
-                
-                // Give some feedback to the user of the geolocation takes some time
-                setTimeout(function(){
-                    if ($('#geolocationProgress').is(":visible") && $('#geolocationProgress').prop("step") === "Geolocate") {
-                        $('#geolocationProgress').html("Still trying to find your location... Depending on your device, this might take some time");
-                        setTimeout(function(){
-                            if ($('#geolocationProgress').is(":visible") && $('#geolocationProgress').prop("step") === "Geolocate") {
-                                $('#geolocationProgress').html("Still trying to find your location... On some devices, there might be a prompt for confirmation on the screen. Please confirm to allow geolocation of your device.");
-                                setTimeout(function() {
-                                    if ($('#geolocationProgress').is(":visible") && $('#geolocationProgress').prop("step") === "Geolocate") {
-                                        $('#geolocationProgress').html("Still trying to find your location... If you don't want to wait, you might try to type the name of a famous location around you.");
-                                    }
-                                }, 10000);
-                            }
-                        },10000);
-                    }
-                },5000);
-            }
-            else {
-                alert("Geolocation is not supported (or disabled) on your device, or on your browser");
-                $('#searchingForTitles').hide();
-            }
-
-        } else {
-            $('#searchingForTitles').hide();
-            // We have to remove the focus from the search field,
-            // so that the keyboard does not stay above the message
-            $("#searchTitles").focus();
-            alert("Archive not set : please select an archive");
-            $("#btnConfigure").click();
-        }
+        }).fail(function() { alert("Error reading article with title " + title); });
     }
     
-    /**
-     * Called when a geolocation request succeeds : start looking for titles around the location
-     * @param {Position} pos Position given by geolocation
-     */
-    function geo_success(pos) {
-        var crd = pos.coords;
-
-        if ($('#geolocationProgress').is(":visible")) {
-            $('#geolocationProgress').prop("step", "SearchInTitleIndex");
-            $('#geolocationProgress').html("Found your location : lat:" + crd.latitude.toFixed(7) + ", long:" + crd.longitude.toFixed(7)
-                    + "<br/>Now looking for articles around this location...");
-
-            currentCoordinates = new geometry.point(crd.longitude, crd.latitude);
-
-            pushBrowserHistoryState(null, null, crd.latitude, crd.longitude, maxDistanceArticlesNearbySearch);
-
-            searchTitlesNearbyGivenCoordinates(crd.latitude, crd.longitude, maxDistanceArticlesNearbySearch);
-        }
-        else {
-            // If the geolocationProgress div is not visible, it's because it has been canceled
-            // So we simply ignore the result
-        }
-    }
-
-    /**
-     * Called when a geolocation fails
-     * @param {PositionError} err
-     */
-    function geo_error(err) {
-        if ($('#geolocationProgress').is(":visible")) {
-            alert("Unable to geolocate your device : " + err.code + " : " + err.message);
-            $('#geolocationProgress').hide();
-            $('#searchingForTitles').hide();
-        }
-        else {
-            // If the geolocationProgress div is not visible, it's because it has been canceled
-            // So we simply ignore the result
-        }
-    }
-
     function goToRandomArticle() {
-        selectedArchive.getRandomTitle(function(title) {
-            if (title === null || title === undefined) {
+        selectedArchive.getRandomDirEntry(function(dirEntry) {
+            if (dirEntry === null || dirEntry === undefined) {
                 alert("Error finding random article.");
             }
             else {
-                if (title.namespace === 'A') {
-                    $("#articleName").html(title.name());
-                    pushBrowserHistoryState(title.name());
+                if (dirEntry.namespace === 'A') {
+                    $("#articleName").html(dirEntry.title);
+                    pushBrowserHistoryState(dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
-                    readArticle(title);
+                    readArticle(dirEntry);
                 }
                 else {
                     // If the random title search did not end up on an article,
@@ -1298,17 +1000,17 @@ define(['jquery', 'abstractBackend', 'util', 'uiUtil', 'cookies','geometry','osa
     }
     
     function goToMainArticle() {
-        selectedArchive.getMainPageTitle(function(title) {
-            if (title === null || title === undefined) {
+        selectedArchive.getMainPageDirEntry(function(dirEntry) {
+            if (dirEntry === null || dirEntry === undefined) {
                 console.error("Error finding main article.");
             }
             else {
-                if (title.namespace === 'A') {
-                    $("#articleName").html(title.name());
-                    pushBrowserHistoryState(title.name());
+                if (dirEntry.namespace === 'A') {
+                    $("#articleName").html(dirEntry.title);
+                    pushBrowserHistoryState(dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
-                    readArticle(title);
+                    readArticle(dirEntry);
                 }
                 else {
                     console.error("The main page of this archive does not seem to be an article");

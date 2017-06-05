@@ -4,23 +4,23 @@
  * Copyright 2015 Mossroy and contributors
  * License GPL v3:
  *
- * This file is part of Evopedia.
+ * This file is part of Kiwix.
  *
- * Evopedia is free software: you can redistribute it and/or modify
+ * Kiwix is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Evopedia is distributed in the hope that it will be useful,
+ * Kiwix is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Evopedia (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
+ * along with Kiwix (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
  */
 'use strict';
-define(['xzdec_wrapper', 'util', 'utf8', 'q'], function(xz, util, utf8, Q) {
+define(['xzdec_wrapper', 'util', 'utf8', 'q', 'zimDirEntry'], function(xz, util, utf8, Q, zimDirEntry) {
 
     var readInt = function(data, offset, size)
     {
@@ -113,7 +113,7 @@ define(['xzdec_wrapper', 'util', 'utf8', 'q'], function(xz, util, utf8, Q) {
     /**
      * 
      * @param {Integer} offset
-     * @returns {unresolved} DirEntry data (without the file)
+     * @returns {DirEntry} DirEntry
      */
     ZIMFile.prototype.dirEntry = function(offset)
     {
@@ -126,27 +126,27 @@ define(['xzdec_wrapper', 'util', 'utf8', 'q'], function(xz, util, utf8, Q) {
                 mimetype: readInt(data, 0, 2),
                 namespace: String.fromCharCode(data[3])
             };
-            dirEntry.isRedirect = (dirEntry.mimetype === 0xffff);
-            if (dirEntry.isRedirect)
+            dirEntry.redirect = (dirEntry.mimetype === 0xffff);
+            if (dirEntry.redirect)
                 dirEntry.redirectTarget = readInt(data, 8, 4);
             else
             {
                 dirEntry.cluster = readInt(data, 8, 4);
                 dirEntry.blob = readInt(data, 12, 4);
             }
-            var pos = dirEntry.isRedirect ? 12 : 16;
+            var pos = dirEntry.redirect ? 12 : 16;
             dirEntry.url = utf8.parse(data.subarray(pos), true);
             while (data[pos] !== 0)
                 pos++;
             dirEntry.title = utf8.parse(data.subarray(pos + 1), true);
-            return dirEntry;
+            return new zimDirEntry.DirEntry(that, dirEntry);
         });
     };
 
     /**
      * 
      * @param {Integer} index
-     * @returns {unresolved} DirEntry data (without the file)
+     * @returns {DirEntry} DirEntry
      */
     ZIMFile.prototype.dirEntryByUrlIndex = function(index)
     {
@@ -160,7 +160,7 @@ define(['xzdec_wrapper', 'util', 'utf8', 'q'], function(xz, util, utf8, Q) {
     /**
      * 
      * @param {Integer} index
-     * @returns {unresolved} DirEntry data (without the file)
+     * @returns {DirEntry} DirEntry
      */
     ZIMFile.prototype.dirEntryByTitleIndex = function(index)
     {
@@ -213,8 +213,18 @@ define(['xzdec_wrapper', 'util', 'utf8', 'q'], function(xz, util, utf8, Q) {
          * @returns {Promise}
          */
         fromFileArray: function(fileArray) {
-            // Let's sort the file array in alphabetic order
-            fileArray.sort();
+            // Array of blob objects should be sorted by their name property
+            fileArray.sort(function(a, b) {
+                  var nameA = a.name.toUpperCase(); 
+                  var nameB = b.name.toUpperCase(); 
+                  if (nameA < nameB) {
+                    return -1;
+                  }
+                  if (nameA > nameB) {
+                    return 1;
+                  }
+                  return 0;
+            });
             return util.readFileSlice(fileArray[0], 0, 80).then(function(header)
             {
                 var zf = new ZIMFile(fileArray);
