@@ -26,7 +26,8 @@ module.exports = {
     },
     "firefox" : {
       "desiredCapabilities": {
-        "browserName": "chrome",
+        "browserName": "firefox",
+        "version": "45.0",
         "javascriptEnabled": true,
         "acceptSslCerts": true,
         "build": "build-" + TRAVIS_JOB_NUMBER,
