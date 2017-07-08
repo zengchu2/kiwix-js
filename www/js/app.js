@@ -762,6 +762,9 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     // Since late 2014, all ZIM files should use relative URLs
     var regexpImageUrl = /^(?:\.\.\/|\/)+(I\/.*)$/;
     var regexpMetadataUrl = /^(?:\.\.\/|\/)+(-\/.*)$/;
+    // This regular expression matches the href of all <link> tags containing rel="stylesheet" in raw HTML
+    var regexpSheetHref = /(<link\s+(?=[^>]*rel\s*=\s*"stylesheet)[^>]*href\s*=\s*["'])([^"']+)(["'][^>]*>)/ig;
+
 
     /**
      * Display the the given HTML article in the web page,
@@ -771,14 +774,73 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {String} htmlArticle
      */
     function displayArticleInForm(dirEntry, htmlArticle) {
+        // Display the article inside the web page.
+
+        //Fast-replace img with data-img and hide image [kiwix-js #272]
+        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*)src(\s*=)/ig,
+            "$1style=\"display: none;\" onload=\"this.style.display='inline'\" data-kiwixsrc$2");
+
+     //Preload stylesheets [kiwix-js @149]
+        //Set up blobArray of promises
+        var cssArray = htmlArticle.match(regexpSheetHref);
+        var blobArray = [];
+        getBLOB(cssArray);
+
+        //Extract CSS URLs from given array of links
+        function getBLOB(arr) {
+            for (var i = 0; i < arr.length; i++) {
+                var linkArray = regexpSheetHref.exec(arr[i]);
+                regexpSheetHref.lastIndex = 0; //Reset start position for next loop
+                if (regexpMetadataUrl.test(linkArray[2])) { //It's a CSS file contained in ZIM
+                    var linkURL = uiUtil.removeUrlParameters(decodeURIComponent(linkArray[2].match(regexpMetadataUrl)[1]));
+                    console.log("Attempting to resolve CSS link #" + i + "...");
+                    var linkBLOB = resolveCSS(linkURL, i); //Pass link and index
+                } else {
+                    blobArray[i] = linkArray[2]; //If CSS not in ZIM, store URL in blobArray
+                    injectCSS(); //Ensure this is called even if none of CSS links are in ZIM
+                }
+            }
+        }
+
+        function resolveCSS(title, index) {
+            selectedArchive.getDirEntryByTitle(title).then(
+                function (dirEntry) {
+                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                    //var cssContent = util.uintToString(content);
+                    var cssBlob = new Blob([content], { type: 'text/css' });
+                    var newURL = URL.createObjectURL(cssBlob);
+                    //return URL.createObjectURL(cssBlob);
+                    blobArray[index] = newURL;
+                    injectCSS();
+                });
+            }).fail(function (e) {
+                console.error("could not find DirEntry for CSS : " + title, e);
+                blobArray[index] = "Error";
+                injectCSS();
+            });
+        }
+
+        function injectCSS() {
+            if (blobArray.length === cssArray.length) { //If all promised values have been obtained
+                for (var i in cssArray) {
+                    cssArray[i] = cssArray[i].replace(/(href\s*=\s*["'])([^"']+)/ig, "$1" + blobArray[i]);
+                }
+                htmlArticle = htmlArticle.replace(regexpSheetHref, ""); //Void existing stylesheets
+                var cssArray$ = "\r\n" + cssArray.join("\r\n") + "\r\n";
+                htmlArticle = htmlArticle.replace(/\s*(<\/head>)/i, cssArray$ + "$1");
+                injectHTML(htmlArticle); //This passes the revised HTML to the image and JS subroutine...
+            } else {
+                console.log("Waiting for " + (cssArray.length - blobArray.length) + " out of " + cssArray.length + " to resolve...")
+            }
+        }
+    //End of preload stylesheets code
+
+        function injectHTML(htmlContent) {
         $("#readingArticle").hide();
         $("#articleContent").show();
         // Scroll the iframe to its top
         $("#articleContent").contents().scrollTop(0);
-
-        // Display the article inside the web page.
-        $('#articleContent').contents().find('body').html(htmlArticle);
-        
+            $('#articleContent').contents().find('body').html(htmlContent);
         
         // If the ServiceWorker is not useable, we need to fallback to parse the DOM
         // to inject math images, and replace some links with javascript calls
@@ -844,7 +906,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
                 // We try to find its name (from an absolute or relative URL)
-                var imageMatch = image.attr("src").match(regexpImageUrl);
+                    var imageMatch = image.attr('data-kiwixsrc').match(regexpImageUrl); //kiwix-js #272
                 if (imageMatch) {
                     var title = decodeURIComponent(imageMatch[1]);
                     selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
@@ -854,45 +916,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         });
                     }).fail(function (e) {
                         console.error("could not find DirEntry for image:" + title, e);
-                    });
-                }
-            });
-
-            // Load CSS content
-            $('#articleContent').contents().find('link[rel=stylesheet]').each(function() {
-                var link = $(this);
-                // We try to find its name (from an absolute or relative URL)
-                var hrefMatch = link.attr("href").match(regexpMetadataUrl);
-                if (hrefMatch) {
-                    // It's a CSS file contained in the ZIM file
-                    var title = uiUtil.removeUrlParameters(decodeURIComponent(hrefMatch[1]));
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
-                            var cssContent = util.uintToString(content);
-                            // For some reason, Firefox OS does not accept the syntax <link rel="stylesheet" href="data:text/css,...">
-                            // So we replace the tag with a <style type="text/css">...</style>
-                            // while copying some attributes of the original tag
-                            // Cf http://jonraasch.com/blog/javascript-style-node
-                            var cssElement = document.createElement('style');
-                            cssElement.type = 'text/css';
-
-                            if (cssElement.styleSheet) {
-                                cssElement.styleSheet.cssText = cssContent;
-                            } else {
-                                cssElement.appendChild(document.createTextNode(cssContent));
-                            }
-                            var mediaAttributeValue = link.attr('media');
-                            if (mediaAttributeValue) {
-                                cssElement.media = mediaAttributeValue;
-                            }
-                            var disabledAttributeValue = link.attr('media');
-                            if (disabledAttributeValue) {
-                                cssElement.disabled = disabledAttributeValue;
-                            }
-                            link.replaceWith(cssElement);
-                        });
-                    }).fail(function (e) {
-                        console.error("could not find DirEntry for CSS : " + title, e);
                     });
                 }
             });
@@ -922,6 +945,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
 
         }  
+    }
     }
 
     /**
