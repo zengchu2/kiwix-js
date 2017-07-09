@@ -763,7 +763,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     var regexpImageUrl = /^(?:\.\.\/|\/)+(I\/.*)$/;
     var regexpMetadataUrl = /^(?:\.\.\/|\/)+(-\/.*)$/;
     // This regular expression matches the href of all <link> tags containing rel="stylesheet" in raw HTML
-    var regexpSheetHref = /(<link\s+(?=[^>]*rel\s*=\s*"stylesheet)[^>]*href\s*=\s*["'])([^"']+)(["'][^>]*>)/ig;
+    var regexpSheetHref = /(<link\s+(?=[^>]*rel\s*=\s*["']stylesheet)[^>]*href\s*=\s*["'])([^"']+)(["'][^>]*>)/ig;
 
 
     /**
@@ -776,8 +776,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     function displayArticleInForm(dirEntry, htmlArticle) {
         // Display the article inside the web page.
 
-        //Fast-replace img with data-img and hide image [kiwix-js #272]
-        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*)src(\s*=)/ig,
+        //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
+        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig,
             "$1style=\"display: none;\" onload=\"this.style.display='inline'\" data-kiwixsrc$2");
 
      //Preload stylesheets [kiwix-js @149]
