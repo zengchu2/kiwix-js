@@ -866,9 +866,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     //Add styling to image captions that is hard-coded in Wikipedia mobile
                     htmlArticle = htmlArticle.replace(/class\s*=\s*["']\s*thumbcaption\s*["']\s*/ig, 'style="margin: 0.5em 0 0.5em; font-size: 0.8em; line-height: 1.5; padding: 0 !important; color: #54595d; width: auto !important;"');
                     //Move info-box below lead paragraph like on Wikipedia mobile
-                    htmlArticle = htmlArticle.replace(/(<table\s*(?=[^>]*infobox)[\s\S]+?<\/table>[^<]*)(<p\b[^>]*>(?:(?=([^<]+))\3|<(?!p\b[^>]*>))*?<\/p>)/ig, "$2$1");
+                    htmlArticle = htmlArticle.replace(/(<table\s+(?=[^>]*infobox)[\s\S]+?<\/table>[^<]*)(<p\b[^>]*>(?:(?=([^<]+))\3|<(?!p\b[^>]*>))*?<\/p>)/ig, "$2$1");
                     //Set infobox styling hard-coded in Wikipedia mobile
                     htmlArticle = htmlArticle.replace(/(table\s+(?=[^>]*class\s*=\s*["'][^"']*infobox)[^>]*style\s*=\s*["'][^"']+[^;'"]);?\s*["']/ig, '$1; position: relative; border: 1px solid #eaecf0; text-align: left; background-color: #f8f9fa;"');
+                    //Wrap <h2> tags in <div> to control bottom border width if there's an infobox
+                    htmlArticle = htmlArticle.match(/table\s+(?=[^>]*class\s*=\s*["'][^"']*infobox)/i) ? htmlArticle.replace(/(<h2\s+[^<]*<\/h2>)/ig, '<div style="width: 60%;">$1</div>') : htmlArticle;
                 }
                 if (cssSource != "zimfile") { //For all cases except where user wants exactly what's in the zimfile...
                     //Reduce the hard-coded top padding to 0
