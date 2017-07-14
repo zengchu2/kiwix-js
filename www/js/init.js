@@ -23,11 +23,12 @@
 'use strict';
 var params = {};
 var results = params['results'] || 10; //Number of search results to display
-var cssSource = params['cssSource'] || "local"; //One of "zimfile", "local" or "mobile""
+params['cssSource'] = params['cssSource'] || "desktop"; //Set default to "desktop" or "mobile"
+params['cssCache'] = params['cssCache'] || true; //Set default to true to use cached CSS, false to use Zim only
 
 require.config({
     baseUrl: 'js/lib',
-    config: { '../app': { results: results, cssSource: cssSource } },
+    config: { '../app': { results: results, params: params } },
     paths: {
         'jquery': 'jquery-3.2.1.slim',
         'bootstrap': 'bootstrap'
