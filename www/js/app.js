@@ -795,19 +795,32 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         var blobArray = [];
         var cssSource = params['cssSource'];
         var cssCache = params['cssCache'];
+        var zimType = "";
         getBLOB(cssArray);
 
         //Extract CSS URLs from given array of links
         function getBLOB(arr) {
-            if (cssSource == "desktop" && (!arr.join().match(/-\/s\/style\.css/i))) {
-                //Insert standard desktop style if user selected 'desktop' mode and ZIMfile is not already desktop
-                arr.push('<link href="../-/s/style.css" rel="stylesheet">');
-            }
+            zimType = arr.join().match(/-\/s\/style\.css/i) ? "desktop" : zimType;
+            zimType = arr.join().match(/minerva|mobile/i) ? "mobile" : zimType;
+
             for (var i = 0; i < arr.length; i++) {
                 var linkArray = regexpSheetHref.exec(arr[i]);
                 regexpSheetHref.lastIndex = 0; //Reset start position for next loop
                 if (regexpMetadataUrl.test(linkArray[2])) { //It's a CSS file contained in ZIM
                     var zimLink = decodeURIComponent(uiUtil.removeUrlParameters(linkArray[2]));
+                    if ((zimType != cssSource) && zimLink.match(/(-\/s\/style\.css)|minerva|mobile|parsoid/i)) { //If it's the wrong ZIM type and style matches main styles...
+                        if (zimLink.match(/(-\/s\/style\.css)|(minerva)/i)) { //If it matches one of the required styles...
+                            zimLink = (cssSource == "mobile") ? "../-/s/style-mobile.css" : "../-/s/style.css"; //Take it from cache, because not in the ZIM
+                            console.log("Matched #" + i + " [" + zimLink + "] from local filesystem because style is not in ZIM" +
+                                "\nbut your display options require a " + cssSource + " style");
+                        }
+                        if (cssSource == "desktop" && zimLink.match(/minerva|mobile|parsoid/)) { //If user selected desktop style and style is one of the mobile styles
+                            console.log("Voiding #" + i + " [" + zimLink + "] from document header \nbecause your display options require a desktop style");
+                            zimLink = "#"; //Void these mobile styles
+                        }
+                        blobArray[i] = zimLink;
+                        injectCSS();
+                    } else {
                     //If this is a standard Wikipedia css use stylesheet cached in the filesystem...
                     if ( cssCache &&
                         (zimLink.match(/-\/s\/style\.css/i) ||
@@ -822,25 +835,15 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                          zimLink.match(/-\/s\/css_modules\/mobile\.css/i) ||
                          zimLink.match(/-\/s\/css_modules\/skins\.minerva\.base\.reset\|skins\.minerva\.content\.styles\|ext\.cite\.style\|mediawiki\.page\.gallery\.styles\|mobile\.app\.pagestyles\.android\|mediawiki\.skinning\.content\.parsoid\.css/i)
                         )) {
-                        if (cssSource == "desktop" && zimLink.match(/minerva|mobile|parsoid/)) { //If user selected desktop style and the ZIM is formatted for mobile...
-                            zimLink = "#"; //Void the style
-                        } 
-                        if ((cssSource == "mobile") || (zimLink.match(/minerva/i))) { //If user has selected mobile display mode or mobile is built into ZIM, substitute main stylesheet
-                            zimLink = zimLink.match(/(-\/s\/style\.css)|(minerva)/i) ? "../-/s/style-mobile.css" : zimLink;
-                        }
                             blobArray[i] = zimLink.replace(/\|/ig, "_"); //Replace "|" with "_" (legacy for some stylesheets with pipes in filename)
                             console.log("Matched #" + i + " [" + blobArray[i] + "] from local filesystem");
                         injectCSS();
-                    } else { //Try to get the stylesheet from the ZIM file
-                        if ((cssSource == "mobile") && (zimLink.match(/-\/s\/style\.css/i))) { //If user has selected mobile display mode but ZIM is desktop themed...
-                            zimLink = "#"; //Void the style
-                            injectCSS();
-                            continue;
-                        }
+                    } else { //Try to get the stylesheet from the ZIM file unless it's the wrong ZIM type
                         var linkURL = zimLink.match(regexpMetadataUrl)[1];
                         console.log("Attempting to resolve CSS link #" + i + " [" + linkURL + "] from ZIM file..." + 
                             (cssCache ? "\n(Consider adding file #" + i + " to the local filesystem)" : ""));
                         resolveCSS(linkURL, i); //Pass link and index
+                    }
                     }
                 } else {
                     blobArray[i] = linkArray[2]; //If CSS not in ZIM, store URL in blobArray
@@ -874,13 +877,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 }
                 htmlArticle = htmlArticle.replace(regexpSheetHref, ""); //Void existing stylesheets
                 var cssArray$ = "\r\n" + cssArray.join("\r\n") + "\r\n";
-                if (cssSource == "mobile") { //If user has selected mobile display mode, insert extra stylesheets
-                    var mobileCSS = transformStyles.toMobileCSS(htmlArticle, cssArray$);
+                if (cssSource == "mobile") { //If user has selected mobile display mode...
+                    var mobileCSS = transformStyles.toMobileCSS(htmlArticle, zimType, cssCache, cssArray$);
                     htmlArticle = mobileCSS.html;
                     cssArray$ = mobileCSS.css;
                 }
                 if (cssSource == "desktop") { //If user has selected desktop display mode...
-                    htmlArticle = transformStyles.toDesktopCSS(htmlArticle).html;
+                    htmlArticle = transformStyles.toDesktopCSS(htmlArticle,zimType,cssCache).html;
                 }
                 if ( cssCache ) { //For all cases except where user wants exactly what's in the zimfile...
                     //Reduce the hard-coded top padding to 0
