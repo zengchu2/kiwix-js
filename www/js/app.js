@@ -676,6 +676,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @returns {Boolean}
      */
     function handleTitleClick(event) {       
+
+        //TESTING//
+        console.log("Initiating HTML load...");
+        console.time("Time to HTML load");
+
         var dirEntryId = event.target.getAttribute("dirEntryId");
         $("#articleList").empty();
         $('#articleListHeaderMessage').empty();
@@ -785,6 +790,12 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     function displayArticleInForm(dirEntry, htmlArticle) {
         // Display the article inside the web page.
 
+        //TESTING
+        console.log("** HTML received **");
+        console.timeEnd("Time to HTML load");
+        console.log("Loading stylesheets...");
+        console.time("Time to First Paint");
+
         //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig,
             "$1style=\"display: none;\" onload=\"this.style.display='inline'\" data-kiwixsrc$2");
@@ -824,7 +835,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             selectedArchive.getDirEntryByTitle(title).then(
                 function (dirEntry) {
                 selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
-                    //var cssContent = util.uintToString(content); //Uncomment this line and break on next to capture cssContent for local filesystem cache
+                    var cssContent = util.uintToString(content); //Uncomment this line and break on next to capture cssContent for local filesystem cache
                     var cssBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
                     var newURL = URL.createObjectURL(cssBlob);
                     //blobArray[index] = newURL; //Don't bother with "index" -- you don't need to track the order of the blobs TODO: delete this logic
@@ -934,6 +945,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
 
             // Load images
+
+                //TESTING
+                console.log("** First Paint complete **");
+                console.timeEnd("Time to First Paint");
+
             $('#articleContent').contents().find('body').find('img').each(function() {
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
