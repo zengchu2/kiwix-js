@@ -558,6 +558,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     function setLocalArchiveFromFileList(files) {
         selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
             // The archive is set : go back to home page to start searching
+
+            //TESTING
+            console.time("Time to HTML load");
+
             $("#btnHome").click();
         });
     }
@@ -834,27 +838,38 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         function resolveCSS(title, index) {
             selectedArchive.getDirEntryByTitle(title).then(
                 function (dirEntry) {
-                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                selectedArchive.readBinaryFile(dirEntry,
+                    function (readableTitle, content, namespace, url) {
                     var cssContent = util.uintToString(content); //Uncomment this line and break on next to capture cssContent for local filesystem cache
                     var cssBlob = new Blob([content], { type: 'text/css' });
-                    var newURL = URL.createObjectURL(cssBlob);
+                    var newURL = [namespace + "/" + url, URL.createObjectURL(cssBlob)];
                     //blobArray[index] = newURL; //Don't bother with "index" -- you don't need to track the order of the blobs TODO: delete this logic
                     blobArray.push(newURL);
-                    injectCSS(); //Don't move this: it must run within .then function to pass correct values
+                    injectCSS(); //DO NOT move this: it must run within .then function to pass correct values
                 });
             }).fail(function (e) {
                 console.error("could not find DirEntry for CSS : " + title, e);
-                blobArray[index] = title;
+                //blobArray[index] = title;
+                blobArray.push(title);
                 injectCSS();
             });
         }
 
         function injectCSS() {
             if (blobArray.length === cssArray.length) { //If all promised values have been obtained
-                for (var i in cssArray) {
-                    cssArray[i] = cssArray[i].replace(/(href\s*=\s*["'])([^"']+)/i, "$1" + blobArray[i]);
-                    //DEV note: do not attempt to add onload="URL.revokeObjectURL...)": see [kiwix.js #284]
+                for (var i in cssArray) { //Put them back in the correct order
+                    for (var j in blobArray) { //Iterate the blobArray to find the matching entry
+                        if (~cssArray[i].indexOf(blobArray[j][0])) { break; }
+                    }
+                    if (/blob:/i.test(blobArray[j][1])) {
+                        cssArray[i] = cssArray[i].replace(/(href\s*=\s*["'])([^"']+)/i, "$1" +
+                        blobArray[j][1] + '" data-kiwixhref="$2');//Store the original URL for later use
+                        //DEV note: do not attempt to add onload="URL.revokeObjectURL...)": see [kiwix.js #284]
+                    //DEBUG:
+                        //console.log("BLOB CSS #" + i + ": " + cssArray[i] + "\nshould correspond to: " + blobArray[j][0]);
+                    }
                 }
+
                 htmlArticle = htmlArticle.replace(regexpSheetHref, ""); //Void existing stylesheets
                 var cssArray$ = "\r\n" + cssArray.join("\r\n") + "\r\n";
                 if (cssSource == "mobile") { //If user has selected mobile display mode...
@@ -863,9 +878,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     cssArray$ = mobileCSS.css;
                 }
                 if (cssSource == "desktop") { //If user has selected desktop display mode...
-                    htmlArticle = transformStyles.toDesktopCSS(htmlArticle,zimType,cssCache).html;
+                    var desktopCSS = transformStyles.toDesktopCSS(htmlArticle, zimType, cssCache, cssSource, cssArray$);
+                    htmlArticle = desktopCSS.html;
+                    cssArray$ = desktopCSS.css;
                 }
-                if ( cssCache ) { //For all cases except where user wants exactly what's in the zimfile...
+                if (cssCache) { //For all cases except where user wants exactly what's in the zimfile...
                     //Reduce the hard-coded top padding to 0
                     htmlArticle = htmlArticle.replace(/(<div\s+[^>]*mw-body[^>]+style[^>]+padding\s*:\s*)1em/i, "$10 1em");
                 }
@@ -890,7 +907,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         if (contentInjectionMode === 'jquery') {
 
             // Convert links into javascript calls
-            $('#articleContent').contents().find('body').find('a').each(function() {
+                $('#articleContent').contents().find('body').find('a').each(function () {
                 // Store current link's url
                 var url = $(this).attr("href");
                 if (url === null || url === undefined) {
@@ -901,7 +918,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
                 if (cssClass === "new") {
                     // It's a link to a missing article : display a message
-                    $(this).on('click', function(e) {
+                        $(this).on('click', function (e) {
                         alert("Missing article in Wikipedia");
                         return false;
                     });
@@ -935,7 +952,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     else if (url.substring(0, 1) === "/") {
                         url = url.substring(1);
                     }
-                    $(this).on('click', function(e) {
+                        $(this).on('click', function (e) {
                         var decodedURL = decodeURIComponent(url);
                         pushBrowserHistoryState(decodedURL);
                         goToArticle(decodedURL);
@@ -950,14 +967,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 console.log("** First Paint complete **");
                 console.timeEnd("Time to First Paint");
 
-            $('#articleContent').contents().find('body').find('img').each(function() {
+                $('#articleContent').contents().find('body').find('img').each(function () {
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
                 // We try to find its name (from an absolute or relative URL)
                     var imageMatch = image.attr('data-kiwixsrc').match(regexpImageUrl); //kiwix-js #272
                 if (imageMatch) {
                     var title = decodeURIComponent(imageMatch[1]);
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                        selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                         selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
                             uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
@@ -969,7 +986,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
 
                 /*/ Load Javascript content
-            $('#articleContent').contents().find('script').each(function() {
+                $('#articleContent').contents().find('script').each(function () {
                 var script = $(this);
                 // We try to find its name (from an absolute or relative URL)
                     if (script) { var srcMatch = script.attr("src").match(regexpMetadataUrl) }
@@ -977,7 +994,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 if (srcMatch) {
                     // It's a Javascript file contained in the ZIM file
                     var title = uiUtil.removeUrlParameters(decodeURIComponent(srcMatch[1]));
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                        selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                         if (dirEntry === null)
                             console.log("Error: js file not found: " + title);
                         else
@@ -1083,5 +1100,4 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             }
         });
     }
-
 });
