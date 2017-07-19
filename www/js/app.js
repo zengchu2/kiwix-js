@@ -800,9 +800,9 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         console.log("Loading stylesheets...");
         console.time("Time to First Paint");
 
-        //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
-        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig,
-            "$1style=\"display: none;\" onload=\"this.style.display='inline'\" data-kiwixsrc$2");
+        //Fast-replace img with data-img and hide image [kiwix-js #272]
+        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
+
 
      //Preload stylesheets [kiwix-js @149]
         //Set up blobArray of promises
