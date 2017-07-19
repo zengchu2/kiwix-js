@@ -875,7 +875,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         testBlob + '" data-kiwixhref="$2');//Store the original URL for later use
                         //DEV note: do not attempt to add onload="URL.revokeObjectURL...)": see [kiwix.js #284]
                     //DEBUG:
-                        console.log("BLOB CSS #" + i + ": " + resultsArray[i] + "\nshould correspond to: " + testBlob);
+                        //console.log("BLOB CSS #" + i + ": " + resultsArray[i] + "\nshould correspond to: " + testBlob);
                     }
                 cssArray = resultsArray;
                 htmlArticle = htmlArticle.replace(regexpSheetHref, ""); //Void existing stylesheets
@@ -894,6 +894,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     //Reduce the hard-coded top padding to 0
                     htmlArticle = htmlArticle.replace(/(<div\s+[^>]*mw-body[^>]+style[^>]+padding\s*:\s*)1em/i, "$10 1em");
                 }
+                //For all cases, neutralize the toggleOpenSection javascript that causes a crash - TODO: make it work for mobile style
+                htmlArticle = htmlArticle.replace(/onclick\s*=\s*["']toggleOpenSection[^"']*['"]\s*/ig, "");
                 htmlArticle = htmlArticle.replace(/\s*(<\/head>)/i, cssArray$ + "$1");
                 console.log("All CSS resolved");
                 injectHTML(htmlArticle); //Pass the revised HTML to the image and JS subroutine...
