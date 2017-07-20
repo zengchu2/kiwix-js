@@ -559,9 +559,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
             // The archive is set : go back to home page to start searching
 
-            //TESTING
-            console.time("Time to HTML load");
-
             $("#btnHome").click();
         });
     }
@@ -684,6 +681,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         //TESTING//
         console.log("Initiating HTML load...");
         console.time("Time to HTML load");
+        console.log("Initiating Document Ready timer...");
+        console.time("Time to Document Ready");
 
         var dirEntryId = event.target.getAttribute("dirEntryId");
         $("#articleList").empty();
@@ -976,6 +975,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 //TESTING
                 console.log("** First Paint complete **");
                 console.timeEnd("Time to First Paint");
+                var numImages = htmlContent.match(/kiwixsrc\s*=\s*["'](?:\.\.\/|\/)+(I\/)/ig).length;
+                var countImages = 0;
 
                 $('#articleContent').contents().find('body').find('img').each(function () {
                 var image = $(this);
@@ -988,6 +989,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
                             uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
+                                //TESTING
+                                countImages++;
+                                console.log("Extracted image " + countImages + " of " + numImages + "...");
+                                if (countImages == numImages) { console.log("** All images loaded: document ready **"); console.timeEnd("Time to Document Ready");}
                         });
                     }).fail(function (e) {
                         console.error("could not find DirEntry for image:" + title, e);
@@ -1092,6 +1097,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
     
     function goToMainArticle() {
+
+        //TESTING
+        console.time("Time to HTML load");
+
         selectedArchive.getMainPageDirEntry(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 console.error("Error finding main article.");
