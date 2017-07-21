@@ -678,11 +678,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      */
     function handleTitleClick(event) {       
 
-        //TESTING//
+        /*/TESTING//
         console.log("Initiating HTML load...");
         console.time("Time to HTML load");
         console.log("Initiating Document Ready timer...");
-        console.time("Time to Document Ready");
+        console.time("Time to Document Ready"); */
 
         var dirEntryId = event.target.getAttribute("dirEntryId");
         $("#articleList").empty();
@@ -727,6 +727,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             selectedArchive.resolveRedirect(dirEntry, readArticle);
         }
         else {
+
+            //TESTING//
+            console.log("Initiating HTML load...");
+            console.time("Time to HTML load");
+            console.log("Initiating Document Ready timer...");
+            console.time("Time to Document Ready");
+
             selectedArchive.readArticle(dirEntry, displayArticleInForm);
         }
     }
@@ -799,7 +806,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         console.log("Loading stylesheets...");
         console.time("Time to First Paint");
 
-        //Fast-replace img with data-img and hide image [kiwix-js #272]
+        //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
 
 
@@ -975,10 +982,31 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 //TESTING
                 console.log("** First Paint complete **");
                 console.timeEnd("Time to First Paint");
-                var numImages = htmlContent.match(/kiwixsrc\s*=\s*["'](?:\.\.\/|\/)+(I\/)/ig).length;
+                var images = $('#articleContent').contents().find('body').find('img');
                 var countImages = 0;
+                var sliceSize = 5; //DEV: Set this to desired slice size
+                var countSlices = Math.floor(images.length / (sliceSize));
+                var remainder = images.length % (sliceSize);
+                var imageSlice = {};
+                var slice$x = 0;
+                var slice$y = 0;  
+                sliceImages();
 
-                $('#articleContent').contents().find('body').find('img').each(function () {
+                function sliceImages() {
+                    if ((countImages >= slice$y) && (countImages < images.length)) { //If starting loop or slice batch is complete AND we still need images for article
+                        slice$x = slice$y > 0 ? slice$x + sliceSize : 0; //Increment slice$x except at outset
+                        slice$y = slice$y + sliceSize;
+                        slice$y = slice$y > images.length ? images.length : slice$y; //If all images can be obtained in one batch, set slice$y to number of images
+                        if (slice$y + remainder === images.length) { slice$y += remainder; }
+                        console.log("About to request images # " + slice$x + " to " + slice$y + "...");
+                        imageSlice = images.slice(slice$x, slice$y);
+                        serializeImages();
+                    }
+                }
+
+                function serializeImages() {
+                //$('#articleContent').contents().find('body').find('img').each(function () {
+                    $(imageSlice).each(function () {
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
                 // We try to find its name (from an absolute or relative URL)
@@ -989,19 +1017,28 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
                             uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
+                                    console.log("Extracted image " + countImages + " of " + images.length + "...");
+                                    countImages++
+                                    sliceImages();
+
                                 //TESTING
-                                countImages++;
-                                console.log("Extracted image " + countImages + " of " + numImages + "...");
-                                if (countImages == numImages) { console.log("** All images loaded: document ready **"); console.timeEnd("Time to Document Ready");}
+                                    if (countImages == images.length) {
+                                        console.log("** All images extracted: document ready **");
+                                        console.timeEnd("Time to Document Ready");
+                                    }
                         });
                     }).fail(function (e) {
                         console.error("could not find DirEntry for image:" + title, e);
+                                countImages++;
+                                sliceImages();
                     });
                 }
             });
+                }
 
-                /*/ Load Javascript content
-                $('#articleContent').contents().find('script').each(function () {
+                // Load Javascript content
+                function loadJavascript() {
+                //$('#articleContent').contents().find('script').each(function () {
                 var script = $(this);
                 // We try to find its name (from an absolute or relative URL)
                     if (script) { var srcMatch = script.attr("src").match(regexpMetadataUrl) }
@@ -1022,7 +1059,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         console.error("could not find DirEntry for javascript : " + title, e);
                     });
                 }
-                });*/
+                }
 
         }  
     }
@@ -1097,10 +1134,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
     
     function goToMainArticle() {
-
-        //TESTING
-        console.time("Time to HTML load");
-
         selectedArchive.getMainPageDirEntry(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 console.error("Error finding main article.");
