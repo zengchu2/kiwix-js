@@ -995,8 +995,20 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 var slice$x = 0;
                 var slice$y = 0;  
                 var windowScroll = false;
+                if (images) { //If there are images in the article, set up a listener function for onscroll event
+                    if (images.length > firstSliceSize) {
+                        $("#articleContent").contents().on("scroll", function () {
+                            if (windowScroll) { //Ensure event doesn't fire multiple times
+                                windowScroll = false; //Indicate we no longer need to delay execution because user has scrolled
+                                sliceImages();
+                            }
+                        });
+                    }
                 sliceImages();
+                }
 
+                //Loads images in batches or "slices" according to firstSliceSize and sliceSize parameters set above
+                //Slices after firstSlice are delayed until the user scrolls the iframe window
                 function sliceImages() {
                     //If starting loop or slice batch is complete AND we still need images for article
                     if ((countImages >= slice$y) && (countImages < images.length)) {
@@ -1007,19 +1019,18 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                             slice$y = slice$y > images.length ? images.length : slice$y;
                              //Last batch should be increased to include any remainder
                             if (slice$x > 0 && (slice$y + remainder === images.length)) { slice$y += remainder; }
-                        console.log("** About to request images # " + (slice$x + 1) + " to " + slice$y + "...");
+                            console.log("Requesting images # " + (slice$x + 1) + " to " + slice$y + "...");
                         imageSlice = images.slice(slice$x, slice$y);
                             windowScroll = true; //Ensure next loop gets delayed until a scroll event occurs
                         serializeImages();
                         } else {
-                            $("#articleContent").contents().on("scroll", function () {
-                                if (windowScroll) { //Ensure event doesn't fire multiple times
-                                    windowScroll = false; //Indicate we no longer need to delay execution because user has scrolled
-                                    sliceImages();
+                            console.log("** Waiting for user to scroll the window...");
                                 }
-                            });
+                    } else { //All images requested, so Unload the scroll listener
+                        if (countImages == images.length) {
+                            console.log("Unloading scroll listener");
+                            $("#articleContent").contents().off('scroll');
                         }
-                        if (!windowScroll) { $("#articleContent").contents().off('scroll'); }
                     }
                 }
 
