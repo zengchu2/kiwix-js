@@ -812,7 +812,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
         //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
-
+        //Ensure 24px clickable image height so user can request images by clicking [kiwix-js #173]
+        htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)height(\s*=\s*)/ig,
+            '$1height="24" alt="Image" style="color: lightyellow; background-color: lightyellow;" ' +
+            'onload="this.height = this.getAttribute(\'data-kiwixheight\'); this.style.background = \'\';" ' +
+            'data-kiwixheight$2');
 
      //Preload stylesheets [kiwix-js @149]
         //Set up blobArray of promises
@@ -1013,6 +1017,18 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         });
                     }
                 sliceImages();
+                } else { //User did not request images, so give option of loading one by one {kiwix-js #173]
+                    if (images.length) {
+                        images.each(function () {
+                            // Attach an onclick function to load the image
+                            var img = $(this);
+                            $(this).on('click', function () {
+                                loadOneImage(img.attr('data-kiwixsrc'), function (url) {
+                                    img[0].src = url;
+                                });
+                            });
+                        });
+                    }
                 }
             //TESTING
                 if (!images.length) {
@@ -1128,6 +1144,26 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
     }
 
+    function loadOneImage(image, callback) {
+        // It's a standard image contained in the ZIM file
+        // We try to find its name (from an absolute or relative URL)
+        var imageMatch = image.match(regexpImageUrl);
+        if (imageMatch) {
+            var title = decodeURIComponent(imageMatch[1]);
+            selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
+                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
+                    var imageBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
+                    var newURL = URL.createObjectURL(imageBlob);
+                    callback(newURL);
+                });
+            }).fail(function (e) {
+                console.error("Could not find DirEntry for image:" + title, e);
+                callback("");
+            });
+        }
+    }
+
+
     /**
      * Changes the URL of the browser page, so that the user might go back to it
      * 
@@ -1175,6 +1211,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
     
     function goToRandomArticle() {
+        if (selectedArchive === null) { return; } //Prevents exception if user hasn't selected an archive
         selectedArchive.getRandomDirEntry(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 alert("Error finding random article.");
