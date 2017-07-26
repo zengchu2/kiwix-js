@@ -988,7 +988,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             }  
 
             loadImages();
-
+            //loadJavascript(); //Disabled for now, since it does nothing
         }
     }
 
@@ -1123,9 +1123,30 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
         }
 
-        // Load Javascript content
-        function loadJavascript() {
-            //$('#articleContent').contents().find('script').each(function () {
+    }  //End of loadImages()
+
+    function loadOneImage(image, callback) {
+        // It's a standard image contained in the ZIM file
+        // We try to find its name (from an absolute or relative URL)
+        var imageMatch = image.match(regexpImageUrl);
+        if (imageMatch) {
+            var title = decodeURIComponent(imageMatch[1]);
+            selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
+                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
+                    var imageBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
+                    var newURL = URL.createObjectURL(imageBlob);
+                    callback(newURL);
+                });
+            }).fail(function (e) {
+                console.error("Could not find DirEntry for image:" + title, e);
+                callback("");
+            });
+        }
+    }
+
+    // Load Javascript content
+    function loadJavascript() {
+        $('#articleContent').contents().find('script').each(function () {
             var script = $(this);
             // We try to find its name (from an absolute or relative URL)
             if (script) { var srcMatch = script.attr("src").match(regexpMetadataUrl) }
@@ -1146,26 +1167,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     console.error("could not find DirEntry for javascript : " + title, e);
                 });
             }
-        }
-    }
-
-    function loadOneImage(image, callback) {
-        // It's a standard image contained in the ZIM file
-        // We try to find its name (from an absolute or relative URL)
-        var imageMatch = image.match(regexpImageUrl);
-        if (imageMatch) {
-            var title = decodeURIComponent(imageMatch[1]);
-            selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
-                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                    var imageBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
-                    var newURL = URL.createObjectURL(imageBlob);
-                    callback(newURL);
-                });
-            }).fail(function (e) {
-                console.error("Could not find DirEntry for image:" + title, e);
-                callback("");
-            });
-        }
+        });
     }
 
 
