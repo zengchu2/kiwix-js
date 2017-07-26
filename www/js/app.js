@@ -863,7 +863,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 selectedArchive.readBinaryFile(dirEntry,
                     function (readableTitle, content, namespace, url) {
                     //var cssContent = util.uintToString(content); //Uncomment this line and break on next to capture cssContent for local filesystem cache
-                    var cssBlob = new Blob([content], { type: 'text/css' });
+                    var cssBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
                     var newURL = [namespace + "/" + url, URL.createObjectURL(cssBlob)];
                     //blobArray[index] = newURL; //Don't bother with "index" -- you don't need to track the order of the blobs TODO: delete this logic
                     blobArray.push(newURL);
@@ -1135,7 +1135,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             var title = decodeURIComponent(imageMatch[1]);
             selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                 selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                    var imageBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
+                        var imageBlob = new Blob([content], { type: 'image' }, { oneTimeOnly: true });
                     var newURL = URL.createObjectURL(imageBlob);
                     callback(newURL);
                 });
