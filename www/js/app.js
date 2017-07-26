@@ -1093,9 +1093,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 if (imageMatch) {
                     var title = decodeURIComponent(imageMatch[1]);
                     selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
-                            uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
+                            var mimetype = /^[^.]+\.svg$/i.test(url) ? "image/svg+xml" : "image";
+                            uiUtil.feedNodeWithBlob(image, 'src', content, mimetype);
                             countImages++
 
                             //TESTING
@@ -1135,7 +1136,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             var title = decodeURIComponent(imageMatch[1]);
             selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                 selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                        var imageBlob = new Blob([content], { type: 'image' }, { oneTimeOnly: true });
+                        var mimetype = /^[^.]+\.svg$/i.test(url) ? "image/svg+xml" : "image";
+                        var imageBlob = new Blob([content], { type: mimetype }, { oneTimeOnly: true });
                     var newURL = URL.createObjectURL(imageBlob);
                     callback(newURL);
                 });
