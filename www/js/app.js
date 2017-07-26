@@ -812,11 +812,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
         //Fast-replace img src with data-kiwixsrc and hide image [kiwix-js #272]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
-        //Ensure 24px clickable image height so user can request images by clicking [kiwix-js #173]
+        if (!params['imageDisplay']) {
+            //Ensure 36px clickable image height so user can request images by clicking [kiwix-js #173]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)height(\s*=\s*)/ig,
-            '$1height="24" alt="Image" style="color: lightblue; background-color: lightblue;" ' +
-            'onload="this.height = this.getAttribute(\'data-kiwixheight\'); this.style.background = \'\';" ' +
+                '$1height="36" alt="Placeholder" style="color: lightblue; background-color: lightblue;" ' +
+                //'onload="this.height = this.getAttribute(\'data-kiwixheight\'); this.style.background = \'\';" ' + //This doesn't work on FFOS
             'data-kiwixheight$2');
+        }
 
      //Preload stylesheets [kiwix-js @149]
         //Set up blobArray of promises
@@ -1030,8 +1032,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 images.each(function () {
                     // Attach an onclick function to load the image
                     var img = $(this);
-                    $(this).on('click', function () {
-                        loadOneImage(img.attr('data-kiwixsrc'), function (url) {
+                img.on('click', function () {
+                    this.height = this.getAttribute('data-kiwixheight');
+                    this.style.background = "";
+                    loadOneImage(this.getAttribute('data-kiwixsrc'), function (url) {
                             img[0].src = url;
                         });
                     });
@@ -1123,8 +1127,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
         }
 
-    }  //End of loadImages()
-
     function loadOneImage(image, callback) {
         // It's a standard image contained in the ZIM file
         // We try to find its name (from an absolute or relative URL)
@@ -1143,6 +1145,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             });
         }
     }
+
+    } //End of loadImages()
 
     // Load Javascript content
     function loadJavascript() {
