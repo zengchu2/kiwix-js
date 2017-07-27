@@ -1009,10 +1009,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         var countImages = 0;
         //DEV: firstSliceSize determines maximum number of images loaded above the fold (should be <= 10)
         //Smaller numbers give faster subjective experience, but too small may delay load of visible images above the fold
-        var firstSliceSize = 10;
+        var firstSliceSize = 7;
         //DEV: sliceSize determines minimum batch size of background image extraction for remaining images
         //Larger numbers marginally increase speed of background extraction but take longer for directory lookup and conflict with user scrolling
-        var sliceSize = 20;
+        var sliceSize = 10;
         var remainder = (images.length - firstSliceSize) % (sliceSize);
         var imageSlice = {};
         var slice$x = 0;
@@ -1065,6 +1065,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         * Slices after firstSlice are delayed until the user scrolls the iframe window
         **/
         function sliceImages() {
+            //Chrome seems to loose the number of images between loops, so we repeat this statement:
+            images = $('#articleContent').contents().find('body').find('img');
             //If starting loop or slice batch is complete AND we still need images for article
             if ((countImages >= slice$y) && (countImages < images.length)) {
                 if (!windowScroll) { //If we haven't requested the next loop to be on scroll
@@ -1076,14 +1078,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     if (slice$x > 0 && (slice$y + remainder === images.length)) { slice$y += remainder; }
                     console.log("Requesting images # " + (slice$x + 1) + " to " + slice$y + "...");
                     imageSlice = images.slice(slice$x, slice$y);
-                    if (imageSlice.length > 5) { // Check to see if the slice contains svg images...
+                    if (imageSlice.length > 3) { // Check to see if the slice contains svg images...
                         for (var t = 0; t < imageSlice.length; t++) {
                             if (/\.svg$/i.test(imageSlice[t].getAttribute('data-kiwixsrc'))) {
-                                var tempimageSlice = imageSlice.slice(0, 5);
-                                slice$y = slice$x + 5 //Reduce the sliceSize to 5 to prevent app from hanging
+                                var tempimageSlice = imageSlice.slice(0, 3);
+                                slice$y = slice$x + 3 //Reduce the sliceSize to 3 to prevent app from hanging
                                 imageSlice = tempimageSlice;
                                 //Increment svg loop detector unless we reach 30 (6*5) svg images extracted
-                                svg = svg < 6 ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
+                                svg = svg < 10 ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
                                 console.log("SVG images detected in slice, reducing image sliceSize...");
                                 break;
                             }
