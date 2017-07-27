@@ -1015,6 +1015,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         var imageSlice = {};
         var slice$x = 0;
         var slice$y = 0;
+        var svg = 0;
         var windowScroll = false;
         if (images.length && imageDisplay) { //If there are images in the article, set up a listener function for onscroll event
             if (images.length > firstSliceSize) {
@@ -1035,8 +1036,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 img.on('click', function () {
                     this.height = this.getAttribute('data-kiwixheight');
                     this.style.background = "";
-                    loadOneImage(this.getAttribute('data-kiwixsrc'), function (url) {
-                            img[0].src = url;
+                    //loadOneImage(this.getAttribute('data-kiwixsrc'), function (url) {
+                    //    img[0].src = url;
+                    //}); //Both the blob method and the src="data:" method work - if changing, edit loadOneImage() also
+                    loadOneImage(this.getAttribute('data-kiwixsrc'), function (mimetype, data) {
+                        img[0].src = "data:" + mimetype + ";base64," + btoa(data);
                         });
                     });
                 });
@@ -1070,6 +1074,19 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     if (slice$x > 0 && (slice$y + remainder === images.length)) { slice$y += remainder; }
                     console.log("Requesting images # " + (slice$x + 1) + " to " + slice$y + "...");
                     imageSlice = images.slice(slice$x, slice$y);
+                    if (imageSlice.length > 5) { // Check to see if the slice contains svg images...
+                        for (var t = 0; t < imageSlice.length; t++) {
+                            if (/\.svg$/i.test(imageSlice[t].getAttribute('data-kiwixsrc'))) {
+                                var tempimageSlice = imageSlice.slice(0, 5);
+                                slice$y = slice$x + 5 //Reduce the sliceSize to 5 to prevent app from hanging
+                                imageSlice = tempimageSlice;
+                                //Increment svg loop detector unless we reach 30 (6*5) svg images extracted
+                                svg = svg < 6 ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
+                                console.log("SVG images detected in slice, reducing image sliceSize...");
+                                break;
+                            }
+                        }
+                    }
                     serializeImages();
                 } else {
                     console.log("** Waiting for user to scroll the window...");
@@ -1095,8 +1112,16 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                         selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
-                            var mimetype = /^[^.]+\.svg$/i.test(url) ? "image/svg+xml" : "image";
+                            var mimetype = url.match(/\.(\w{2,4})$/);
+                            mimetype = mimetype ? "image/" + mimetype[1].toLowerCase() : "image";
+                            mimetype = /\.jpg$/i.test(url) ? "image/jpeg" : mimetype;
+                            mimetype = /\.tif$/i.test(url) ? "image/tiff" : mimetype;
+                            mimetype = /\.ico$/i.test(url) ? "image/x-icon" : mimetype;
+                            mimetype = /\.svg$/i.test(url) ? "image/svg+xml" : mimetype;
                             uiUtil.feedNodeWithBlob(image, 'src', content, mimetype);
+                            //Alternative way of loading images below also works
+                            //var data = util.uintToString(content);
+                            //image[0].src = "data:" + mimetype + ";base64," + btoa(data);
                             countImages++
 
                             //TESTING
@@ -1112,8 +1137,9 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                             //END TESTING
 
                             if (countImages == slice$y) {
-                                windowScroll = true; //Once slice is complete, delay the loop
-                            }
+                                //Once slice is complete, delay the loop unless there are SVG images in slice
+                                windowScroll = svg ? false : true; //If svg is 0, waits for user scroll on next sliceImages loop
+                            }   //Explanation: extraction of svg images is slow and memory-hungry, so keep going while detecting SVG, in slices of 5 (see code above)
                             sliceImages();
                         });
                     }).fail(function (e) {
@@ -1136,10 +1162,17 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             var title = decodeURIComponent(imageMatch[1]);
             selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                 selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                        var mimetype = /^[^.]+\.svg$/i.test(url) ? "image/svg+xml" : "image";
-                        var imageBlob = new Blob([content], { type: mimetype }, { oneTimeOnly: true });
-                    var newURL = URL.createObjectURL(imageBlob);
-                    callback(newURL);
+                        var mimetype = url.match(/\.(\w{2,4})$/);
+                        mimetype = mimetype ? "image/" + mimetype[1].toLowerCase() : "image";
+                        mimetype = /\.jpg$/i.test(url) ? "image/jpeg" : mimetype;
+                        mimetype = /\.tif$/i.test(url) ? "image/tiff" : mimetype;
+                        mimetype = /\.ico$/i.test(url) ? "image/x-icon" : mimetype;
+                        mimetype = /\.svg$/i.test(url) ? "image/svg+xml" : mimetype;
+                        //var imageBlob = new Blob([content], { type: mimetype }, { oneTimeOnly: true });
+                        //var newURL = URL.createObjectURL(imageBlob);
+                        var data = util.uintToString(content);
+                        //callback(newURL); //If using blob method, no need to send mimetype
+                        callback(mimetype, data);
                 });
             }).fail(function (e) {
                 console.error("Could not find DirEntry for image:" + title, e);
