@@ -200,13 +200,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     });
     $('input:radio[name=cssInjectionMode]').on('click', function (e) {
         params['cssSource'] = this.value;
-        this.checked = true; //Doh, surely you don't have to tell a radio button to do this?
 
     });
     $(document).ready(function (e) {
         // Set checkbox for cssCache and radio for cssSource
         document.getElementById('cssCacheModeCheck').checked = params['cssCache'];
         document.getElementById('imageDisplayModeCheck').checked = params['imageDisplay'];
+        $('input:radio[name=cssInjectionMode]').filter('[value="' + params['cssSource'] + '"]').prop('checked', true);
     });
     
     /**
@@ -864,7 +864,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 function (dirEntry) {
                 selectedArchive.readBinaryFile(dirEntry,
                     function (readableTitle, content, namespace, url) {
-                    //var cssContent = util.uintToString(content); //Uncomment this line and break on next to capture cssContent for local filesystem cache
+                //DEV: Uncomment line below and break on next to capture cssContent for local filesystem cache
+                    //var cssContent = util.uintToString(content);
                     var cssBlob = new Blob([content], { type: 'text/css' }, { oneTimeOnly: true });
                     var newURL = [namespace + "/" + url, URL.createObjectURL(cssBlob)];
                     //blobArray[index] = newURL; //Don't bother with "index" -- you don't need to track the order of the blobs TODO: delete this logic
@@ -1013,6 +1014,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         //DEV: sliceSize determines minimum batch size of background image extraction for remaining images
         //Larger numbers marginally increase speed of background extraction but take longer for directory lookup and conflict with user scrolling
         var sliceSize = 10;
+        var svgSliceSize = 5;
         var remainder = (images.length - firstSliceSize) % (sliceSize);
         var imageSlice = {};
         var slice$x = 0;
@@ -1065,7 +1067,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         * Slices after firstSlice are delayed until the user scrolls the iframe window
         **/
         function sliceImages() {
-            //Chrome seems to loose the number of images between loops, so we repeat this statement:
+            //Chrome seems to lose the number of images between loops, so we repeat this statement:
             images = $('#articleContent').contents().find('body').find('img');
             //If starting loop or slice batch is complete AND we still need images for article
             if ((countImages >= slice$y) && (countImages < images.length)) {
@@ -1078,14 +1080,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     if (slice$x > 0 && (slice$y + remainder === images.length)) { slice$y += remainder; }
                     console.log("Requesting images # " + (slice$x + 1) + " to " + slice$y + "...");
                     imageSlice = images.slice(slice$x, slice$y);
-                    if (imageSlice.length > 3) { // Check to see if the slice contains svg images...
+                    if (imageSlice.length > svgSliceSize) { // Check to see if the slice contains svg images...
                         for (var t = 0; t < imageSlice.length; t++) {
                             if (/\.svg$/i.test(imageSlice[t].getAttribute('data-kiwixsrc'))) {
-                                var tempimageSlice = imageSlice.slice(0, 3);
-                                slice$y = slice$x + 3 //Reduce the sliceSize to 3 to prevent app from hanging
+                                var tempimageSlice = imageSlice.slice(0, svgSliceSize);
+                                slice$y = slice$x + svgSliceSize //Reduce sliceSize to prevent app from hanging
                                 imageSlice = tempimageSlice;
-                                //Increment svg loop detector unless we reach 30 (6*5) svg images extracted
-                                svg = svg < 10 ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
+                                //Increment svg loop detector unless we reach 30 svg images extracted
+                                svg = svg < (Math.floor(30/svgSliceSize)) ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
                                 console.log("SVG images detected in slice, reducing image sliceSize...");
                                 break;
                             }
