@@ -198,8 +198,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     $('input:checkbox[name=imageDisplayMode]').on('change', function (e) {
         params['imageDisplay'] = this.checked ? true : false;
     });
-    $('input:radio[name=cssInjectionMode]').on('change', function (e) {
+    $('input:radio[name=cssInjectionMode]').on('click', function (e) {
         params['cssSource'] = this.value;
+        this.checked = true; //Doh, surely you don't have to tell a radio button to do this?
+
     });
     $(document).ready(function (e) {
         // Set checkbox for cssCache and radio for cssSource
