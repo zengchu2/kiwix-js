@@ -84,6 +84,16 @@
     color : orange;
 }
 
+.settings {
+    float: left;
+    margin: 5px;
+    padding: 10px;
+    max-width: 300px;
+    height: 150px;
+    border: 1px solid black;
+} 
+
+
 /* Réduction de la taille des éléments en haut pour les petits écrans */
 @media (max-width: 768px) {
     /* Pour réduire la taille du menu en haut */
