@@ -800,6 +800,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * Display the the given HTML article in the web page,
      * and convert links to javascript calls
      * NB : in some error cases, the given title can be null, and the htmlArticle contains the error message
+     *
      * @param {DirEntry} dirEntry
      * @param {String} htmlArticle
      */
@@ -818,7 +819,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             //Ensure 36px clickable image height so user can request images by clicking [kiwix-js #173]
         htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)height(\s*=\s*)/ig,
                 '$1height="36" alt="Placeholder" style="color: lightblue; background-color: lightblue;" ' +
-                //'onload="this.height = this.getAttribute(\'data-kiwixheight\'); this.style.background = \'\';" ' + //This doesn't work on FFOS
             'data-kiwixheight$2');
         }
 
@@ -990,125 +990,308 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     }
                 });
 
+                loadImages();
+                //loadJavascript(); //Disabled for now, since it does nothing
             }  
 
-            loadImages();
-            //loadJavascript(); //Disabled for now, since it does nothing
-        }
-    }
+        } //End of injectHTML()
 
-    // Load images
+    } //End of displayArticleInForm()
+
+
+    /** This is the main image loading function.
+     * Contains four sub functions: prepareImages, triageImages, displaySlices, loadImageSlice
+     * and a utility function checkVisibleImages
+     */
     function loadImages() {
 
         //TESTING
         console.log("** First Paint complete **");
         console.timeEnd("Time to First Paint");
 
-        //var imageURLs = htmlContent.match(/kiwixsrc\s*=\s*["'](?:\.\.\/|\/)+(I\/)/ig);
-        var imageDisplay = params['imageDisplay'];
-        var images = $('#articleContent').contents().find('body').find('img');
+        //Set up tracking variables
         var countImages = 0;
-        //DEV: firstSliceSize determines maximum number of images loaded above the fold (should be <= 10)
-        //Smaller numbers give faster subjective experience, but too small may delay load of visible images above the fold
-        var firstSliceSize = 7;
-        //DEV: sliceSize determines minimum batch size of background image extraction for remaining images
-        //Larger numbers marginally increase speed of background extraction but take longer for directory lookup and conflict with user scrolling
-        var sliceSize = 10;
-        var svgSliceSize = 5;
-        var remainder = (images.length - firstSliceSize) % (sliceSize);
-        var imageSlice = {};
-        var slice$x = 0;
-        var slice$y = 0;
-        var svg = 0;
-        var windowScroll = false;
-        if (images.length && imageDisplay) { //If there are images in the article, set up a listener function for onscroll event
-            if (images.length > firstSliceSize) {
-                $("#articleContent").contents().on("scroll", function () {
-                    //Ensure event doesn't fire multiple times and waits for previous slice to be retrieved
-                    if (windowScroll && countImages == slice$y) {
-                        windowScroll = false; //Indicate we no longer need to delay execution because user has scrolled
-                        sliceImages();
-                    }
-                });
+    //DEV: Set this to the number of images you want to prefetch after the on-screen images have been fetched
+        var prefetchSliceSize = 20;
+    //DEV: SVG images are currently very taxing: keep this number at 5 or below and test on your system with Sine.html
+        var svgSliceSize = 3;
+        var visibleSlice = [];
+        var svgSlice = [];
+        var prefetchSlice = [];
+        var windowScroll = true;
+        var imageDisplay = params['imageDisplay'];
+
+        //Establish master image array
+        var images = $('#articleContent').contents().find('body').find('img');
+        var allImages = images.length;
+
+        //If user wants to display images...
+        if (imageDisplay) {
+
+            //Set up a listener function for onscroll event
+            if (allImages > prefetchSliceSize) {
+                //Polyfill scrollStopped event
+                $.fn.scrollStopped = function (callback) {
+                    var that = this, $this = $(that);
+                    $this.scroll(function (ev) {
+                        clearTimeout($this.data('scrollTimeout'));
+                        $this.data('scrollTimeout', setTimeout(callback.bind(that), 250, ev));
+                    });
+                }
+                $("#articleContent").contents().scrollStopped(prepareImages);
             }
-            sliceImages();
-        } else { //User did not request images, so give option of loading one by one {kiwix-js #173]
+            if (allImages) {
+                prepareImages();
+            } else {
+                console.log("There are no images to display in this article.");
+            }
+        } else {
+            console.log("Image retrieval disabled by user");
+            //User did not request images, so give option of loading one by one {kiwix-js #173]
             if (images.length) {
                 images.each(function () {
                     // Attach an onclick function to load the image
                     var img = $(this);
-                img.on('click', function () {
-                    this.height = this.getAttribute('data-kiwixheight');
-                    this.style.background = "";
-                    //loadOneImage(this.getAttribute('data-kiwixsrc'), function (url) {
-                    //    img[0].src = url;
-                    //}); //Both the blob method and the src="data:" method work - if changing, edit loadOneImage() also
-                    loadOneImage(this.getAttribute('data-kiwixsrc'), function (mimetype, data) {
-                        img[0].src = "data:" + mimetype + ";base64," + btoa(data);
-                        });
+                    img.on('click', function () {
+                        this.height = this.getAttribute('data-kiwixheight');
+                        this.style.background = "";
+                        loadImageSlice(this, 0, 0, function (sliceID, sliceCount, sliceEnd, mimetype, data) {
+                            img[0].src = "data:" + mimetype + ";base64," + btoa(data);
+                            }, true);
                     });
                 });
             }
-        }
-        //TESTING
-        if (!images.length) {
-            console.log("No images in document");
+            //TESTING
             console.timeEnd("Time to Document Ready");
-        } else {
-            if (!imageDisplay) {
-                console.log("Image retrieval disabled by user");
-                console.timeEnd("Time to Document Ready");
-            }
         }
-        //END TESTING
+
+        /** Prepares the main array of images remaining for triage
+         * and determines which images are visible
+         */
+        function prepareImages() {
+            //Ensure the function isn't launched multiple times
+            if (!windowScroll) { return; }
+            windowScroll = false;
+
+            //Reload images array because we may have spliced it on a previous loop
+            images = $('#articleContent').contents().find('body').find('img');
+            
+            //Remove images that have already been loaded
+            var visibleImage = null;
+            var lastRemovedPosition = 0;
+            for (var i = 0; i < images.length; i++) {
+                if (images[i].src) {
+                    visibleImage = uiUtil.isElementInView(images[i], true) ? lastRemovedPosition : visibleImage;
+                    images.splice(i, 1);
+                    i--; //If we removed an image, reset the index
+                    lastRemovedPosition++;
+                }
+            }
+
+            if (images.length) {
+                console.log("Processing " + images.length + " images...");
+                //Determine first and last visible images in the current window
+                var view = checkVisibleImages();
+                //windowScroll = true;
+                //return;
+
+                //If there are undisplayed images in the current window...
+                if (view.lastVisible >= 0) {
+                    triageImages(view.firstVisible, view.lastVisible);
+                } else {
+                    //If the currently visible image(s) have already been loaded...
+                    if (visibleImage != null) {
+                        //If we are viewing an image within 5 images of the next unloaded image
+                        if (lastRemovedPosition - visibleImage <= 5) {
+                            triageImages();
+                        } else {
+                            console.log("No images need prefetching\n\n" +
+                                "** Waiting for user to scroll **");
+                            windowScroll = true;
+                        }        
+                    } else {
+                        //We don't know where we are because no images are in view, so we'd better fetch some more
+                        triageImages();
+                    }
+                }
+            } else {
+                //Unload scroll listener
+                console.log("Unloading scroll listener");
+                $("#articleContent").contents().off('scroll');
+                windowScroll = true; //Check if it's really unloaded...
+            }
+
+        } //End of prepareImages()
 
         /**
-        * Loads images in batches or "slices" according to firstSliceSize and sliceSize parameters set above
-        * Slices after firstSlice are delayed until the user scrolls the iframe window
-        **/
-        function sliceImages() {
-            //Chrome seems to lose the number of images between loops, so we repeat this statement:
-            images = $('#articleContent').contents().find('body').find('img');
-            //If starting loop or slice batch is complete AND we still need images for article
-            if ((countImages >= slice$y) && (countImages < images.length)) {
-                if (!windowScroll) { //If we haven't requested the next loop to be on scroll
-                    slice$x = slice$y;
-                    slice$y = slice$y > 0 ? slice$y + sliceSize : slice$y + firstSliceSize; //Increment by standard or initial sliceSize 
-                    //If all images can be obtained in one batch, set slice$y to number of images
-                    slice$y = slice$y > images.length ? images.length : slice$y;
-                    //Last batch should be increased to include any remainder
-                    if (slice$x > 0 && (slice$y + remainder === images.length)) { slice$y += remainder; }
-                    console.log("Requesting images # " + (slice$x + 1) + " to " + slice$y + "...");
-                    imageSlice = images.slice(slice$x, slice$y);
-                    if (imageSlice.length > svgSliceSize) { // Check to see if the slice contains svg images...
-                        for (var t = 0; t < imageSlice.length; t++) {
-                            if (/\.svg$/i.test(imageSlice[t].getAttribute('data-kiwixsrc'))) {
-                                var tempimageSlice = imageSlice.slice(0, svgSliceSize);
-                                slice$y = slice$x + svgSliceSize //Reduce sliceSize to prevent app from hanging
-                                imageSlice = tempimageSlice;
-                                //Increment svg loop detector unless we reach 30 svg images extracted
-                                svg = svg < (Math.floor(30/svgSliceSize)) ? svg + 1 : 0; //Resetting svg to 0 will cause wait on scroll on next sliceImages loop
-                                console.log("SVG images detected in slice, reducing image sliceSize...");
-                                break;
-                            }
-                        }
+         * Sort the images into three arrays:
+         * visibleSlice (visible images which will be loaded first)
+         * svgSlice (groups together SVG images)
+         * prefetchSlice (preload set number of non-visible images)
+         * Pass the index of the first and last images of visible area if known 
+         *
+         * @param {number} firstVisible
+         * @param {number} lastVisible
+         */
+        function triageImages(firstVisible, lastVisible) {
+            //Set the window of images to be requested
+            if (typeof firstVisible === 'undefined' || firstVisible == null) { firstVisible = -1; } //No first images was set
+            if (typeof lastVisible === 'undefined' || lastVisible == null) { lastVisible = -1; } //No first images was set
+            var lengthSlice = lastVisible + prefetchSliceSize + 1;
+            var startSlice = firstVisible;
+            //If the requested images window extends beyond the end of the image array...
+            if (lengthSlice > images.length) {
+                //Move the window backwards
+                startSlice -= lengthSlice - images.length;
+                lengthSlice = images.length;
+            }
+            //Check that the start of the window isn't before the beginning of the array
+            startSlice = startSlice < 0 ? 0 : startSlice;
+
+
+            //Sort through images to put them in the appropriate slice arrays
+            var svgGroup1 = [], svgGroup2 = [];
+            for (var i = startSlice; i < lengthSlice; i++) {
+                if (/\.svg$/i.test(images[i].getAttribute('data-kiwixsrc'))) {
+                    if (i < firstVisible || i > lastVisible) {
+                        svgGroup2.push(images[i]);
+                    } else {
+                        svgGroup1.push(images[i]);
                     }
-                    serializeImages();
                 } else {
-                    console.log("** Waiting for user to scroll the window...");
-                }
-            } else { //All images requested, so Unload the scroll listener
-                if (images && images.length > firstSliceSize) {
-                    if (countImages == images.length) {
-                        console.log("Unloading scroll listener");
-                        $("#articleContent").contents().off('scroll');
+                    if (i <= lastVisible) {
+                        visibleSlice.push(images[i]);
+                    } else {
+                        prefetchSlice.push(images[i]);
                     }
                 }
             }
-        }
+            svgSlice = svgGroup1.concat(svgGroup2);
 
-        function serializeImages() {
-            $(imageSlice).each(function () {
+            //Call displaySlices with all counters zeroed
+            //This lets the function know that it should initialize display process
+            displaySlices(0, 0, 0);
+
+        } //End of triageImages()
+
+        /**
+         * This controls the order in which slices will be displayed and acts as a callback function for loadImageSlice
+         * sliceID (callback value) identifies the slices: 1=visibleSlice; 2=prefetchSlice; 3=svgSlice 
+         * sliceCount (callback value) keeps count of the images loaded in the current slice
+         * sliceEnd (callback value) is the index of the last image in the current slice 
+         * Start the function with all values zeroed
+         *
+         * @callback requestCallback
+         * @param {number} sliceID
+         * @param {number} sliceCount
+         * @param {number} sliceEnd
+         */
+        function displaySlices(sliceID, sliceCount, sliceEnd) {
+            //Only respond to callback if all slice images have been extracted (or on startup)
+            if (sliceCount === sliceEnd) {
+                sliceID++; //Get ready to process next slice
+                if (sliceID == 1) {
+                    if (visibleSlice.length) {
+                        console.log("** About to request " + visibleSlice.length + " visible image(s)...");
+                        loadImageSlice(visibleSlice, 1, visibleSlice.length, displaySlices);
+                        visibleSlice = [];
+                    //TESTING
+                        console.timeEnd("Time to Document Ready");
+                    } else { //No images in this slice so move on to next
+                        sliceID++;
+                    }
+                }
+                if (sliceID == 2) {
+                    if (prefetchSlice.length) {
+                        console.log("Prefetching " + prefetchSlice.length + " offscreen images...");
+                        loadImageSlice(prefetchSlice, 2, prefetchSlice.length, displaySlices);
+                        prefetchSlice = [];
+                    } else { //No images in this slice so move on to next
+                        sliceID++;
+                    }
+                }
+                if (sliceID == 3) {
+                    if (svgSlice.length) {
+                        //Set up variables to hold visible image range (to check whether user scrolls during lengthy procedure)
+                        var startSVG;
+                        var endSVG;
+                        iterateSVGSlice(3, 0, 0);
+                    } else { //No images in this slice so move on to next
+                        sliceID++;
+                    }
+                }
+                if (sliceID > 3) {
+                    if (countImages === allImages) {
+                        console.log("** All images extracted from current document **")
+                        windowScroll = true; //Go back to prove this!
+                    } else {
+                        console.log("All images extracted from requested slices\n" +
+                            "** Waiting for user scroll... **");
+                        windowScroll = true;
+                    }
+                }
+            }
+
+            /**
+             * This is a specialized callback to iterate the SVGSlice
+             * This slice needs special handling because svg images can hang the program
+             *
+             * @callback requestCallback
+             * @param {number} sliceID
+             * @param {number} sliceCount
+             * @param {number} sliceEnd
+             */
+            function iterateSVGSlice(sliceID, sliceCount, sliceEnd) {
+                if (sliceCount === sliceEnd) {
+                    //Check to see if visible images have changed (i.e. if user has scrolled)
+                    if (!sliceCount) {
+                        console.log("startSVG");
+                        startSVG = checkVisibleImages();
+                    } else {
+                        console.log("endSVG");
+                        endSVG = checkVisibleImages();
+                    }
+                    if (endSVG) {
+                        if (startSVG.firstVisible != endSVG.firstVisible || startSVG.lastVisible != endSVG.lastVisible) {
+                            //Visible images have changed, so abandon this svgSlice
+                            console.log("** Abandoning svgSlice due to user scroll **");
+                            svgSlice = [];
+                            windowScroll = true;
+                            prepareImages();
+                            return;
+                        }
+                    }                    
+                    var batchSize = svgSliceSize > svgSlice.length ? svgSlice.length : svgSliceSize;
+                    if (batchSize) {
+                        //Split svgSlice into chunks to avoid hanging the program
+                        var svgSubSlice = svgSlice.slice(0, batchSize);
+                        svgSlice = svgSlice.slice(batchSize, svgSlice.length);
+                        console.log("Requesting batch of " + batchSize + " SVG image(s)...");
+                        loadImageSlice(svgSubSlice, 3, batchSize, iterateSVGSlice);
+                    } else {
+                        console.log("** Finished iterating svgSlice");
+                        displaySlices(3, 0, 0);
+                    }
+                }    
+            } //End of iterateSVGSlice()
+
+        } //End of displaySlices()
+
+        /**
+         * Loads images in the array passed as images
+         * sliceID will be passed to the callback 
+         * sliceEnd is the index of the last image in the current slice 
+         * dataRequested == true returns the content and disables creation of blob
+         *
+         * @param {Array} imnages
+         * @param {number} sliceID
+         * @param {number} sliceEnd
+         * @param {requestCallback} callback
+         * @param {Boolean} dataRequested
+         */
+        function loadImageSlice(images, sliceID, sliceEnd, callback, dataRequested) {
+            var sliceCount = 0;
+            $(images).each(function () {
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
                 // We try to find its name (from an absolute or relative URL)
@@ -1117,75 +1300,64 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     var title = decodeURIComponent(imageMatch[1]);
                     selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
                         selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                            // TODO : use the complete MIME-type of the image (as read from the ZIM file)
                             var mimetype = url.match(/\.(\w{2,4})$/);
                             mimetype = mimetype ? "image/" + mimetype[1].toLowerCase() : "image";
                             mimetype = /\.jpg$/i.test(url) ? "image/jpeg" : mimetype;
                             mimetype = /\.tif$/i.test(url) ? "image/tiff" : mimetype;
                             mimetype = /\.ico$/i.test(url) ? "image/x-icon" : mimetype;
                             mimetype = /\.svg$/i.test(url) ? "image/svg+xml" : mimetype;
-                            uiUtil.feedNodeWithBlob(image, 'src', content, mimetype);
-                            //Alternative way of loading images below also works
-                            //var data = util.uintToString(content);
-                            //image[0].src = "data:" + mimetype + ";base64," + btoa(data);
-                            countImages++
-
-                            //TESTING
-                            console.log("Extracted image " + (countImages) + " of " + images.length + "...");
-                            if (countImages == firstSliceSize || (countImages <= firstSliceSize && countImages == images.length)) {
-                                console.log("** First image slice extracted: document ready **");
-                                console.timeEnd("Time to Document Ready");
-                                console.log("");
+                            if (!dataRequested) {
+                                uiUtil.feedNodeWithBlob(image, 'src', content, mimetype);
                             }
-                            if (countImages == images.length) {
-                                console.log("** All images extracted **");
+                            sliceCount++;
+                            console.log("Extracted image #" + countImages + "...");
+                            countImages++;
+                            if (!dataRequested) {
+                                callback(sliceID, sliceCount, sliceEnd, url);
+                            } else {
+                                callback(sliceID, sliceCount, sliceEnd, mimetype, util.uintToString(content));
                             }
-                            //END TESTING
-
-                            if (countImages == slice$y) {
-                                //Once slice is complete, delay the loop unless there are SVG images in slice
-                                windowScroll = svg ? false : true; //If svg is 0, waits for user scroll on next sliceImages loop
-                            }   //Explanation: extraction of svg images is slow and memory-hungry, so keep going while detecting SVG, in slices of 5 (see code above)
-                            sliceImages();
                         });
                     }).fail(function (e) {
+                        sliceCount++;
                         console.error("Could not find DirEntry for image:" + title, e);
                         countImages++;
-                        if (countImages == slice$y) {
-                            windowScroll = true; //Once slice is complete, delay the loop
-                        }
-                        sliceImages();
+                        callback(sliceID, sliceCount, sliceEnd, "Error!");
                     });
                 }
             });
-        }
+        } //End of loadImageRange()
 
-    function loadOneImage(image, callback) {
-        // It's a standard image contained in the ZIM file
-        // We try to find its name (from an absolute or relative URL)
-        var imageMatch = image.match(regexpImageUrl);
-        if (imageMatch) {
-            var title = decodeURIComponent(imageMatch[1]);
-            selectedArchive.getDirEntryByTitle(title).then(function (dirEntry) {
-                selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content, namespace, url) {
-                        var mimetype = url.match(/\.(\w{2,4})$/);
-                        mimetype = mimetype ? "image/" + mimetype[1].toLowerCase() : "image";
-                        mimetype = /\.jpg$/i.test(url) ? "image/jpeg" : mimetype;
-                        mimetype = /\.tif$/i.test(url) ? "image/tiff" : mimetype;
-                        mimetype = /\.ico$/i.test(url) ? "image/x-icon" : mimetype;
-                        mimetype = /\.svg$/i.test(url) ? "image/svg+xml" : mimetype;
-                        //var imageBlob = new Blob([content], { type: mimetype }, { oneTimeOnly: true });
-                        //var newURL = URL.createObjectURL(imageBlob);
-                        var data = util.uintToString(content);
-                        //callback(newURL); //If using blob method, no need to send mimetype
-                        callback(mimetype, data);
-                });
-            }).fail(function (e) {
-                console.error("Could not find DirEntry for image:" + title, e);
-                callback("");
-            });
+        /**
+         * This is a utility function to check the window of images visible to the user.
+         * It needs to be run within the scope of the main images array.
+         * Returns an object with attributes .firstVisible and .lastVisible
+         * They return null if no images are currently visible.
+         */
+        function checkVisibleImages() {
+            var firstVisible = null;
+            var lastVisible = null;
+            //Determine first and last visible images in the current window
+            for (var i = 0; i < images.length; i++) {
+                //console.log("Checking #" + i + ": " + images[i].getAttribute("data-kiwixsrc"));
+                if (uiUtil.isElementInView(images[i], true)) {
+                    //console.log("#" + i + " *is* visible");
+                    if (firstVisible == null) { firstVisible = i; }
+                    lastVisible = i;
+                } else {
+                    //console.log("#" + i + " is not visible");
+                    if (firstVisible != null && lastVisible != null) {
+                        console.log("First visible image is #" + firstVisible + "\n" +
+                            "Last visible image is #" + lastVisible);
+                        break; //We've found the last visible image, so stop the loop
+                    }
+                }
+            }
+            return {
+                firstVisible: firstVisible,
+                lastVisible: lastVisible
+            };
         }
-    }
 
     } //End of loadImages()
 
