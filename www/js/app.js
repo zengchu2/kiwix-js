@@ -198,6 +198,38 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     $('input:checkbox[name=imageDisplayMode]').on('change', function (e) {
         params['imageDisplay'] = this.checked ? true : false;
     });
+    $('input:checkbox[name=cssUIDarkTheme]').on('change', function (e) {
+        params['cssUITheme'] = this.checked ? 'dark' : 'light';
+        if (this.checked) {
+            document.getElementById('search-article').classList.add("dark");
+            document.getElementById('article').classList.add("dark");
+            document.getElementById('navbar').classList.remove("navbar-default");
+            document.getElementById('navbar').classList.add("dark");
+            document.getElementById('archiveFiles').classList.add("dark");
+            document.getElementById('archiveFiles').classList.remove("btn");
+            document.getElementById('container').classList.add("dark");
+            document.getElementById('row').classList.add("dark");
+            document.getElementById('prefix').classList.add("dark");
+            var elements = document.querySelectorAll(".settings");
+            for (var i = 0; i < elements.length; i++) { elements[i].style.border = "1px solid darkgray"; } 
+        }
+        if (!this.checked) {
+            document.getElementById('search-article').classList.remove("dark");
+            document.getElementById('article').classList.remove("dark");
+            document.getElementById('navbar').classList.add("navbar-default");
+            document.getElementById('navbar').classList.remove("dark");
+            document.getElementById('archiveFiles').classList.remove("dark");
+            document.getElementById('archiveFiles').classList.add("btn");
+            document.getElementById('container').classList.remove("dark");
+            document.getElementById('row').classList.remove("dark");
+            document.getElementById('prefix').classList.remove("dark");
+            var elements = document.querySelectorAll(".settings");
+            for (var i = 0; i < elements.length; i++) { elements[i].style.border = "1px solid black"; }
+        }
+    });
+    $('input:checkbox[name=cssWikiDarkTheme]').on('change', function (e) {
+        params['cssTheme'] = this.checked ? 'dark' : 'light';
+    });
     $('input:radio[name=cssInjectionMode]').on('click', function (e) {
         params['cssSource'] = this.value;
 

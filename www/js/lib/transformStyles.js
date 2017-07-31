@@ -84,6 +84,7 @@ define([], function () {
     }
 
     function toMobileCSS(html, zim, cc, cs, css) {
+        var cssTheme = document.getElementById("cssWikiDarkThemeCheck").checked ? "dark" : "light";
         //DEV: Careful not to add styles twice...
         //NB Can't relocate to filterCSS function above because it filters styles serially and code would be called for every style...
         if (zim != cs) { //If ZIM doesn't match user-requested style, add in stylesheets if they're missing
@@ -93,6 +94,10 @@ define([], function () {
         }
         if (cc || (zim == "desktop")) { //If user requested cached styles OR the ZIM does not contain mobile styles
             console.log(zim == "desktop" ? "Transforming display style to mobile..." : "Optimizing cached styles for mobile display...");
+            //Add dark theme if requested
+            css += (cssTheme == "dark") ? '<link href="../-/s/style-dark.css" rel="stylesheet" type="text/css">\r\n' : "";
+            html = (cssTheme == "dark") ? html.replace(/(<h1\s+[^>]*)background-color\s*:\s*white;\s*/i, "$1") : html;
+            html = (cssTheme == "dark") ? html.replace(/(<div\s+[^>]*)background-image\s*:\s*linear-gradient[^;]+white[^;]*;\s*/i, "$1") : html;
         //Allow images to float right or left
         html = html.replace(/class\s*=\s*["']\s*thumb\s+tright\s*["']\s*/ig, 'style="float: right; clear: right; margin-left: 1.4em;"');
         html = html.replace(/class\s*=\s*["']\s*thumb\s+tleft\s*["']\s*/ig, 'style="float: left; clear: left; margin-right: 1.4em;"');
@@ -110,6 +115,7 @@ define([], function () {
     }
 
     function toDesktopCSS(html, zim, cc, cs, css) {
+        var cssTheme = document.getElementById("cssWikiDarkThemeCheck").checked ? "dark" : "light";
         if (cc || (zim != cs)) {
             if (/class\s*=\s*["']gallery/i.test(html) && !/gallery/i.test(css)) {
                 console.log("Inserting missing css required for gallery display [mediawiki.page.gallery.styles.css]...");
@@ -118,6 +124,10 @@ define([], function () {
         }
         if (cc || (zim == "mobile")) { //If user requested cached styles OR the ZIM does not contain desktop styles
             console.log(zim == "mobile" ? "Transforming display style to desktop..." : "Optimizing cached styles for desktop display...");
+            //Add dark theme if requested
+            css += (cssTheme == "dark") ? '<link href="../-/s/style-dark.css" rel="stylesheet" type="text/css">\r\n' : "";
+            html = (cssTheme == "dark") ? html.replace(/(<h1\s+[^>]*)background-color:\s*white;\s*/i, "$1") : html;
+            html = (cssTheme == "dark") ? html.replace(/(<div\s+[^>]*)background-image\s*:\s*linear-gradient[^;]+white[^;]*;\s*/i, "$1") : html;
             //If it's in mobile position, move info-box above lead paragraph like on Wikipedia desktop
             //html = html.replace(/((?:<span\s*>\s*)?<p\b[^>]*>(?:(?=([^<]+))\2|<(?!p\b[^>]*>))*?<\/p>(?:<\/span\s*>)?[^<]*)([\s\S]*?)(<table\s*(?=[^>]*infobox)[\s\S]+?<\/table>)/i, "$4$3$1");
             html = zim == "mobile" ? html.replace(/((?:<span\s*>\s*)?<p\b[\s\S]+?)(<table\s*(?=[^>]*(?:infobox|vertical-navbox))[\s\S]+?<\/table>)/i, "$2\r\n$1") : html;
