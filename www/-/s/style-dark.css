@@ -21,7 +21,7 @@
   span:not([class*="color"]):not([class*="wikEd"]),
   p code, label code, dl code
   {
-    color: #9a9a9a;
+    color: lightgray;
   }
 
   h1, h2, h3, h4, h5, h6, #footer li, .infobox th[style*="background"],
@@ -31,9 +31,8 @@
     color: #9a9a9a !important;
   }
 
-  a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button
-  {
-    color: lightgray !important;
+a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
+    color: #f2f2f2 !important;
   }
 
   a:visited, #toc a:visited, #toc a:visited span
@@ -70,12 +69,12 @@
   /*** Background ***/
   html, body
   {
-    background-color: #222 !important;
+    background-color: black !important;
     background-image: /*[[bg-choice]]*/!important;
     background-clip: border-box !important;
     background-origin: padding-box !important;
     background-attachment: /*[[bg-attachment]]*/!important;
-    /*[[bg-options]]*/;
+    /*[[bg-options]];*/
   }
 
   .mw-ui-button, .mw-ui-button *
