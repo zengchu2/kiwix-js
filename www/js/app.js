@@ -238,6 +238,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Set checkbox for cssCache and radio for cssSource
         document.getElementById('cssCacheModeCheck').checked = params['cssCache'];
         document.getElementById('imageDisplayModeCheck').checked = params['imageDisplay'];
+        document.getElementById('cssWikiDarkThemeCheck').checked = params['cssTheme'] == 'dark' ? true : false;
+        document.getElementById('cssUIDarkThemeCheck').checked = params['cssUITheme'] == 'dark' ? true : false;
         $('input:radio[name=cssInjectionMode]').filter('[value="' + params['cssSource'] + '"]').prop('checked', true);
     });
     

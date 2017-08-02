@@ -28,16 +28,16 @@
   div[style*="color"], input[type="search"], input[type="submit"],
   input[type="number"], select, .suggestions-result
   {
-    color: #9a9a9a !important;
+    color: gainsboro !important;
   }
 
 a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
-    color: #f2f2f2 !important;
+    color: lightblue !important;
   }
 
   a:visited, #toc a:visited, #toc a:visited span
   {
-    color: /*[[visited-color]]*/!important;
+    color: palevioletred !important;
   }
 
   a:hover, a:hover span, #toc a:hover, #toc a:hover span,
@@ -117,6 +117,10 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
   {
     background-color: #222 !important;
   }
+
+.navbox th, .navbox-title {
+    background-color: darkslategray !important
+}
 
   body .ui-button
   {
