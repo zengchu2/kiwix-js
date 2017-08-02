@@ -47,6 +47,16 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
     text-decoration: underline !important;
   }
 
+#content .qb .qbHeader {
+    background: #1d3030;
+    color: whitesmoke;
+}
+
+.prettytable th { /* hightlighting */
+    background: #1d3030;
+}
+
+
   /* text selection */
   ::selection
   {
@@ -118,7 +128,7 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
     background-color: #222 !important;
   }
 
-.navbox th, .navbox-title {
+.navbox th, .climate-table th, .wikitable th, .navbox-title, th[bgcolor] {
     background-color: darkslategray !important
 }
 
@@ -131,9 +141,7 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
   table[style*="background-color:#fff;"], .search-form fieldset, table.ambox, tr[style*="background-color: #fff;"],
   .mw-ui-button[style*="background-color:#008B6D"], tr[style*="background-color: #f5faff;"],
   tr[style*="background:#E9E9E9"] > *, table.infobox.hproduct > tbody > tr[style*="background: #F0F0F0;"],
-  td[style*="background:lightgray"], td[style*="background:#eeeeff"], td[style*="background:#ddddff"],
-  .oo-ui-buttonElement-button:hover, .tracklist tr[style*="background-color:#f7f7f7"]
-  {
+td[style*="background:lightgray"], td[style*="background:#eeeeff"], td[style*="background:#e8e8e8"], td[style*="background:#ddddff"], td[style*="background:#efefef"], td[style*="background:#e9e9e9"], .oo-ui-buttonElement-button:hover, .tracklist tr[style*="background-color:#f7f7f7"] {
     background-color: #282828 !important;
   }
 
@@ -144,9 +152,7 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
   }
 
   td[style*="background: #ececec;"], th[style*="background:#eee"], th[style*="background-color: #eee"],
-  tr[style*="background-color: #f7f7f7;"], th[style*="background:#F2F2F2"], #filetoc, .toccolours,
-  th[style*="background:#F9F9F9"], table.plainlinks, th[style*="background-color: lightgrey"],
-  th[style*="background:#ddd"], .infobox th[style*="background"], .infobox td[style*="background"],
+tr[style*="background-color: #f7f7f7;"], th[style*="background:#F2F2F2"], th[style*="background:#ffffff"], #filetoc, .toccolours, th[style*="background:#F9F9F9"], th[style*="background:#e8e8e8"], table.plainlinks, th[style*="background-color: lightgrey"], th[style*="background:#ddd"], .infobox th[style*="background"], .infobox td[style*="background"],
   td[style*="background:#F2F2F2"], table.wikitable > tbody > tr[style*="background-color:#F6F6F6"],
   .tlheader {
     background-color: #333 !important;
@@ -164,7 +170,7 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
   }
   /* add a white background to transparent images; see
    * https://forum.userstyles.org/discussion/48549/x */
-  a.image img, a[href*=".svg"] img {
+  img[data-kiwixsrc*=".svg"], a.image img, a[href*=".svg"] img {
     background: #ddd !important;
   }
   /* white background to wikEd - see #24 */
