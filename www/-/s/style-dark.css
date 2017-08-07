@@ -89,18 +89,16 @@ a, .CategoryTreeToggle, #toc a, #toc a span, body .ui-button {
   }
 
   /*** Background ***/
-  html, body
-  {
+html, body {
     background-color: black !important;
     background-image: /*[[bg-choice]]*/!important;
     background-clip: border-box !important;
     background-origin: padding-box !important;
-    background-attachment: /*[[bg-attachment]]*/!important;
+    /*background-attachment: [[bg-attachment]]!important;*/
     /*[[bg-options]];*/
   }
 
-  .mw-ui-button, .mw-ui-button *
-  {
+.mw-ui-button, .mw-ui-button * {
     background-color: lightgray !important;
     color: #fff !important;
   }
@@ -188,7 +186,7 @@ tr[style*="background-color: #f7f7f7;"], th[style*="background:#F2F2F2"], th[sty
   }
   /* add a white background to transparent images; see
    * https://forum.userstyles.org/discussion/48549/x */
-  img[data-kiwixsrc$=".svg"], img[data-kiwixsrc*="Kiwix_logo"], a.image img, a[href*=".svg"] img {
+ img[data-file-type*="drawing"][data-kiwixsrc*=".svg"], img[data-kiwixsrc*="Kiwix_logo"], a.image img, a[href*=".svg"] img {
     background: #ddd !important;
   }
   /* white background to wikEd - see #24 */
@@ -338,11 +336,11 @@ blockquote[style*="white"] {
 
   /*** invert images ***/
   img[title="Wikipedia"], .bookshelf-container .bookend, img.mwe-math-fallback-image-inline,
-#mw-wsmfinal-close, img[data-kiwixsrc*="Speaker_Icon"], .infobox img[alt*="structure"][data-kiwixsrc*=".svg"], .infobox img[data-file-type*="drawing"][data-kiwixsrc*=".svg"], img[data-kiwixsrc*=".png"]:active,
+#mw-wsmfinal-close, img[data-kiwixsrc*="Speaker_Icon"], .infobox img[alt*="structure"][data-kiwixsrc*=".svg"], img[data-kiwixsrc*=".png"]:active,
 img[data-kiwixsrc*=".svg"][height="16"], img[data-kiwixsrc*=".svg"][height="17"], img[data-kiwixsrc*=".svg"][height="18"], img[data-kiwixsrc*="Kiwix_icon"],
   .oo-ui-iconElement-icon:not(.mw-echo-notifications-badge), .RTsettings, #gtx-host, .jfk-bubble-closebtn,
   #pt-notifications-notice .mw-echo-notifications-badge:before, .oo-ui-pendingElement-pending,
-  #pt-notifications-alert .mw-echo-notifications-badge:before {
+#pt-notifications-alert .mw-echo-notifications-badge:before, .mw-ui-icon-arrow {
     -webkit-filter: invert(100%) !important;
             filter: invert(100%) !important;
     background-color: transparent !important;
