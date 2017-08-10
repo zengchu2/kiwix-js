@@ -94,7 +94,7 @@ td[style*=background] a:first-child {
   /*** Background ***/
 html, body {
     background-color: black !important;
-    background-image: /*[[bg-choice]]*/!important;
+    /*background-image: [[bg-choice]] !important;*/
     background-clip: border-box !important;
     background-origin: padding-box !important;
     /*background-attachment: [[bg-attachment]]!important;*/
@@ -350,6 +350,12 @@ img[data-kiwixsrc*=".svg"][height="16"], img[data-kiwixsrc*=".svg"][height="17"]
             filter: invert(100%) !important;
     background-color: transparent !important;
   }
+
+/* Possibly redundant -- see entry with Kiwix_logo above (search)
+.infobox img[data-file-type*="drawing"][data-kiwixsrc*=".svg"] {
+    background: silver;
+}*/
+
   .oo-ui-icon-bell {
     opacity: 0.7 !important;
   }
