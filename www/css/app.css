@@ -94,13 +94,34 @@
     border: 1px solid black;
 } 
 
+.navbar-fixed-bottom {
+    background: inherit;
+}
+
+.btn-sm {
+    background: rgba(51,122,183,0.5) !important;
+    border: transparent !important;
+    float: none !important;
+    color: whitesmoke !important;
+    font-weight: bold !important;
+}
+
 .darkfooter {
-    background: rgba(47,79,79,.3) !important;
+    background: rgba(47,79,79,.5) !important;
 }
 
 .glyphicon {
     color: #337ab7;
 }
+
+footer .glyphicon {
+    color: lightblue;
+}
+
+.dropdown-menu, .dropdown-menu a {
+    background-color: rgba(255,255,255,0.7) !important;
+}
+
 
 .darkfooter .glyphicon, .dark .glyphicon {
     color: lightblue;
@@ -110,6 +131,17 @@
     color: lightgray !important;
     background-color: #222 !important;
     border-color: darkgray;
+}
+
+.darkfooter .dropdown-menu, .darkfooter .dropdown-menu a {
+    color: lightblue !important;
+    background-color: rgba(34,34,34,0.6) !important;
+    border-color: darkgray;
+}
+
+.darkfooter .dropdown-menu a:focus, .darkfooter .dropdown-menu a:hover {
+    color: lightblue !important;
+    background: darkslategray !important;
 }
 
 .dark .list-group-item {
@@ -125,6 +157,7 @@
 .dark .btn-default {
     background: #222 !important;
     color: dimgray !important;
+    text-shadow: none;
 }
 
 

@@ -995,6 +995,26 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
         }
     //End of preload stylesheets code
 
+        function setupTableOfContents() {
+            var iframe = window.frames[0].frameElement;
+            var innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+            var tableOfContents = new uiUtil.toc(innerDoc);
+            var headings = tableOfContents.getHeadingObjects();
+            var dropup = '<span class="dropup"><button class="btn btn-primary btn-sm dropdown-toggle" type="button" id="dropdownMenu2" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"> Contents <span class="caret"></span> </button> <ul class="dropdown-menu" aria-labelledby="dropdownMenu2">';
+            headings.forEach(function (heading) {
+                if (/^h1$/i.test(heading.tagName))
+                    dropup = dropup + '<li><a href="javascript:void(0)" onclick="$(&apos;#articleContent&apos;).contents().scrollTop($(&apos;#articleContent&apos;).contents().find(&apos;#' + heading.id + '&apos;).offset().top)">' + heading.textContent + '</a></li>';
+                else if (/^h2$/i.test(heading.tagName))
+                    dropup = dropup + '<li class="small"><a href="javascript:void(0)" onclick="$(&apos;#articleContent&apos;).contents().scrollTop($(&apos;#articleContent&apos;).contents().find(&apos;#' + heading.id + '&apos;).offset().top)">' + heading.textContent + '</a></li>';
+                //else
+                //Currently skip smaller headings until toc scrolling works
+                //dropup = ...
+            });
+            dropup = dropup + '</ul></span>'
+            $("#appStatus").removeClass().html(dropup);
+        }
+
+
         function injectHTML() {
 
             $("#readingArticle").hide();
@@ -1003,6 +1023,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             $("#articleContent").contents().scrollTop(0);
             $('#articleContent').contents().find('body').html(htmlArticle);
 
+            setupTableOfContents();
         
             // If the ServiceWorker is not useable, we need to fallback to parse the DOM
             // to inject math images, and replace some links with javascript calls
