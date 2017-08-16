@@ -1014,8 +1014,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             $("#appStatus").removeClass().html(dropup);
             $("#appStatus").find("a").each(function() {
                 $(this).on("click", function () {
-                    $("#articleContent").contents().scrollTop(
-                        $("#articleContent").contents().find("#" + this.dataset.headingId).offset().top)
+                    window.frames[0].frameElement.contentWindow.location.hash = this.dataset.headingId;
                 });
             });
         }
