@@ -151,7 +151,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
         // Show the selected content in the page
         $('#about').hide();
         $('#configuration').show();
-        $('#formArticleSearch').hide();
+        //$('#formArticleSearch').hide();
         $("#welcomeText").hide();
         $('#articleList').hide();
         $('#articleListHeaderMessage').hide();
@@ -173,7 +173,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
         // Show the selected content in the page
         $('#about').show();
         $('#configuration').hide();
-        $('#formArticleSearch').hide();
+        //$('#formArticleSearch').hide();
         $("#welcomeText").hide();
         $('#articleList').hide();
         $('#articleListHeaderMessage').hide();
@@ -1108,6 +1108,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
                         });
                     }
                 });
+
+                //FFOS doesn't calculate the iframe window height correctly for newly loaded articles (at least in the simulator)
+                //This prevents transparency from working in the bottom toolbar. Setting the style
+                //for iframe height + 30 fixes the issue, and has no effect on other browsers
+                var ele = document.querySelector('#articleContent');
+                var y = ~~ele.style.height.match(/[\d.]+/)[0];
+                y += 30;
+                ele.style.height = y + "px";
 
                 loadImages();
                 //loadJavascript(); //Disabled for now, since it does nothing

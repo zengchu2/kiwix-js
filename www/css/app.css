@@ -21,14 +21,16 @@
  */
 
 [role=region] {
-  top: 0; right: 0; bottom: 0; left: 0;
- 
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
   position: fixed;
   overflow-x: hidden;
 }
 [role=region] > header {
     /*margin: .5rem 0 1rem 0;*/
-    margin: 0 0 1rem 0;
+        margin: 0 0.75em 0 0;
   text-align: center;
 }
 [role=region] > header > h1 {
@@ -40,8 +42,10 @@
   position: relative; /*Fixes #250 Random button display bug in W10M */
 }
 [role=region] > footer {
-  background: rgba(0,0,0,.2);
-  right: 0; bottom: 0; left: 0;
+        background: rgba(51,122,183,.2);
+        right: 0;
+        bottom: 0;
+        left: 0;
   position: fixed;
   text-align: center;
 }
@@ -66,6 +70,11 @@
     z-index: 10;
     top: 20px;
     height: 0; 
+}
+
+.form-control {
+    margin-top: 0.3px;
+    /*box-shadow: none !important;*/
 }
 
 .articleIFrame {
@@ -94,6 +103,10 @@
     border: 1px solid black;
 } 
 
+.navbar-header {
+    float: none !important;
+}
+
 .navbar-fixed-bottom {
     background: inherit;
 }
@@ -106,8 +119,17 @@
     font-weight: bold !important;
 }
 
+.btn {
+    margin-bottom: 1px !important;
+    z-index:initial !important;
+}
+
+.darkfooter .btn-sm {
+    background: rgba(47,79,79,0.7) !important;
+}
+
 .darkfooter {
-    background: rgba(47,79,79,.6) !important;
+    background: rgba(47,79,79,.5) !important;
 }
 
 .glyphicon {
@@ -168,10 +190,14 @@ footer .glyphicon {
         min-height: 20px !important;
         margin-bottom: 1px !important;
     }
-    .navbar-brand {
-        padding-top: 2px !important;
+    /*.navbar-brand, .navbar-nav a { /* GK added navbar-nav a*/
+    /*padding-top: 2px !important;
         padding-bottom: 1px !important;
         height: 25px !important;
+    }*/
+
+    .navbar-nav a {
+        padding-bottom: 15px !important;
     }
     .navbar-toggle {
         padding-top: 2px !important;
@@ -180,26 +206,57 @@ footer .glyphicon {
         margin-bottom: 0px !important;
         background-color: lightgray !important;
     }
-    [role=region] > header {
+    /* Pour réduire la taille des éléments et boutons dans l'aréa de navégation - GK
+    .navbar-nav, .navbar-nav > li {
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
+        margin-top: 2px !important;
+        margin-bottom: 0px !important;
+    } */
+    .navbar-nav {
+        margin-top: 0 !important;
         margin-bottom: 0 !important;
     }
-    /* Pour supprimer l'espace entre la zone de recherche et l'iframe */
+
+        .navbar-nav > li > a { /*Make sure these align correctly rather than stacking at full width - GK*/
+            float: left !important;
+            /*Added this to prevent the buttons becoming so small*/
+            padding-top: 15px !important;
+        }
+
+    .col-md-offset-1 {
+        padding-left: 5px !important;
+    }
+
+    /*[role=region] > header {
+        margin-bottom: 10px !important;
+    }*/
+    /* Pour supprimer l'espace entre la zone de recherche et l'iframe 
     .list-group {
         margin-bottom: 0 !important;
-    }
-    /* Pour réduire la taille du champ de recherche */
+    } */
+    /* Pour réduire la taille du champ de recherche 
     .form-control {
         height: 28px !important;
         padding-bottom: 5px !important;
+    } */
+
+    .dropdown-menu {
+        font-size: 20px !important;
     }
-    /* Pour réduire la taille des boutons en haut de l'écran */
-    .btn-xs, .btn-sm, .btn-default, .btn-group-xs > .btn, .btn-group-sm > .btn {
+
+    .btn-xs {
         font-size: 10px !important;
     }
-    /* Pour réduire la taille des boutons en bas de l'écran */
+
+    /* Pour réduire la taille des boutons en haut de l'écran 
+    .btn-xs, .btn-sm, .btn-default, .btn-group-xs > .btn, .btn-group-sm > .btn {
+        font-size: 10px !important;
+    }*/
+    /* Pour réduire la taille des boutons en bas de l'écran 
     .btn-lg, .btn-group-lg > .btn {
         padding-top: 1px !important;
         padding-bottom: 1px !important;
         font-size: 16px !important;
+    }*/
     }    
-}
