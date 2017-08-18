@@ -74,6 +74,33 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             onKeyUpPrefix(e);
         }
     });
+    var localSearch = {};
+    $('#findText').on('click', function (e) {
+        var innerDocument = window.frames[0].frameElement.contentDocument || window.frames[0].frameElement.contentWindow.document;
+        if (innerDocument.body.innerHTML.length < 10) return;
+        var searchDiv = document.getElementById('row2');
+        var findInArticle = document.getElementById('findInArticle');
+        if (localSearch.remove) {
+            localSearch.remove();
+        } else {
+            localSearch = new util.Hilitor(innerDocument);
+            //TODO: Check right-to-left language support...
+            localSearch.setMatchType('left');
+            findInArticle.addEventListener('keyup', function (e) {
+                localSearch.apply(this.value);
+            }, false);
+        }
+        if (searchDiv.style.display == 'none') {
+            searchDiv.style.display = "inline";
+            findInArticle.focus();
+        } else {
+            searchDiv.style.display = "none";
+        }
+    });
+    $('#findInArticle').on('keyup', function (e) {
+        myHilitor2.apply(this.value);
+    }, false);
+
     $("#btnRandomArticle").on("click", function(e) {
         $('#prefix').val("");
         goToRandomArticle();
@@ -215,7 +242,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             document.getElementById('archiveFiles').classList.add("dark");
             document.getElementById('archiveFiles').classList.remove("btn");
             document.getElementById('container').classList.add("dark");
-            document.getElementById('row').classList.add("dark");
+            document.getElementById('findInArticle').classList.add("dark");
             document.getElementById('prefix').classList.add("dark");
             var elements = document.querySelectorAll(".settings");
             for (var i = 0; i < elements.length; i++) { elements[i].style.border = "1px solid darkgray"; } 
@@ -228,7 +255,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             document.getElementById('archiveFiles').classList.remove("dark");
             document.getElementById('archiveFiles').classList.add("btn");
             document.getElementById('container').classList.remove("dark");
-            document.getElementById('row').classList.remove("dark");
+            document.getElementById('findInArticle').classList.remove("dark");
             document.getElementById('prefix').classList.remove("dark");
             var elements = document.querySelectorAll(".settings");
             for (var i = 0; i < elements.length; i++) { elements[i].style.border = "1px solid black"; }
@@ -1112,7 +1139,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
                 //FFOS doesn't calculate the iframe window height correctly for newly loaded articles (at least in the simulator)
                 //This prevents transparency from working in the bottom toolbar. Setting the style
                 //for iframe height + 30 fixes the issue, and has no effect on other browsers
-                var ele = document.querySelector('#articleContent');
+                var ele = document.getElementById('articleContent');
                 var y = ~~ele.style.height.match(/[\d.]+/)[0];
                 y += 30;
                 ele.style.height = y + "px";
