@@ -75,6 +75,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
         }
     });
     var localSearch = {};
+        //Add keyboard shortcuts
+        $(window).on('keyup', function (e) {
+            //Alt-F for search in article
+            if (e.altKey && e.which == 70) {
+                $('#findText').click();
+                return false;
+            }
+        });
     $('#findText').on('click', function (e) {
         var innerDocument = window.frames[0].frameElement.contentDocument || window.frames[0].frameElement.contentWindow.document;
         if (innerDocument.body.innerHTML.length < 10) return;
@@ -86,8 +94,18 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             localSearch = new util.Hilitor(innerDocument);
             //TODO: Check right-to-left language support...
             localSearch.setMatchType('left');
+                var timer = null;
             findInArticle.addEventListener('keyup', function (e) {
-                localSearch.apply(this.value);
+                    //Ensure timeout doesn't occur if another key has been pressed within time window
+                    clearTimeout(timer);
+                    var val = this.value;
+                    //Ensure nothing happens if only one value has been entered (not specific enough), but ensure timeout is set 
+                    //if no value has been entered (clears highlighting if user deletes all values in search field)
+                    if (~(val.length - 2)) {
+                        timer = setTimeout(function () {
+                            localSearch.apply(val)
+                        }, 500);
+                    }
             }, false);
         }
         if (searchDiv.style.display == 'none') {
@@ -97,9 +115,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies', 'abstractFile
             searchDiv.style.display = "none";
         }
     });
-    $('#findInArticle').on('keyup', function (e) {
-        myHilitor2.apply(this.value);
-    }, false);
 
     $("#btnRandomArticle").on("click", function(e) {
         $('#prefix').val("");
