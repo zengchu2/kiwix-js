@@ -23,6 +23,7 @@
 'use strict';
 var params = {};
 var results = params['results'] || 15; //Number of search results to display
+params['relativeFontSize'] = ~~(getCookie('relativeFontSize') || "100");
 params['cssSource'] = getCookie('cssSource') || "auto"; //Set default to "auto", "desktop" or "mobile"
 params['cssCache'] = getCookie('cssCache') || true; //Set default to true to use cached CSS, false to use Zim only
 //Convert string values of true / false to Boolean without disturbing any Boolean already set:
