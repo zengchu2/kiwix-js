@@ -844,6 +844,12 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     // It's an external link : open in a new tab
                     $(this).attr("target", "_blank");
                 }
+                    else if (/^geo:/.test(url)) {
+                        $(this).attr("target", "_blank");
+                    }
+                    else if (/^tel:/.test(url)) {
+                        $(this).attr("target", "_blank");
+                    }
                 else if (url.match(regexpImageLink)
                     && (util.endsWith(lowerCaseUrl, ".png")
                         || util.endsWith(lowerCaseUrl, ".svg")
