@@ -26,18 +26,9 @@
 // This uses require.js to structure javascript:
 // http://requirejs.org/docs/api.html#define
 
-define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFilesystemAccess'],
- function($, zimArchiveLoader, util, uiUtil, cookies, abstractFilesystemAccess) {
+define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFilesystemAccess','q'],
+ function($, zimArchiveLoader, util, uiUtil, cookies, abstractFilesystemAccess, q) {
      
-    // Disable any eval() call in jQuery : it's disabled by CSP in any packaged application
-    // It happens on some wiktionary archives, because there is some javascript inside the html article
-    // Cf http://forum.jquery.com/topic/jquery-ajax-disable-script-eval
-    jQuery.globalEval = function(code) {
-        // jQuery believes the javascript has been executed, but we did nothing
-        // In any case, that would have been blocked by CSP for package applications
-        console.log("jQuery tried to run some javascript with eval(), which is not allowed in packaged applications");
-    };
-    
     /**
      * Maximum number of articles to display in a search
      * @type Integer
@@ -569,20 +560,48 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * This is used in the testing interface to inject a remote archive.
+     * Reads a remote archive with given URL, and returns the response in a Promise.
+     * This function is used by setRemoteArchives below, for UI tests
+     * 
+     * @param url The URL of the archive to read
+     * @returns {Promise}
      */
-    window.setRemoteArchive = function(url) {
+    function readRemoteArchive(url) {
+        var deferred = q.defer();
         var request = new XMLHttpRequest();
         request.open("GET", url, true);
         request.responseType = "blob";
-        request.onload = function (e) {
-            if (request.response) {
-                // Hack to make this look similar to a file
-                request.response.name = url;
-                setLocalArchiveFromFileList([request.response]);
+        request.onreadystatechange = function () {
+            if (request.readyState === XMLHttpRequest.DONE) {
+                if ((request.status >= 200 && request.status < 300) || request.status === 0) {
+                    // Hack to make this look similar to a file
+                    request.response.name = url;
+                    deferred.resolve(request.response);
+                }
+                else {
+                    deferred.reject("HTTP status " + request.status + " when reading " + url);
+                }
             }
         };
+        request.onabort = function (e) {
+            deferred.reject(e);
+        };
         request.send(null);
+        return deferred.promise;
+    }
+    
+    /**
+     * This is used in the testing interface to inject remote archives
+     */
+    window.setRemoteArchives = function() {
+        var readRequests = [];
+        var i;
+        for (i = 0; i < arguments.length; i++) {
+            readRequests[i] = readRemoteArchive(arguments[i]);
+        }
+        return q.all(readRequests).then(function(arrayOfArchives) {
+            setLocalArchiveFromFileList(arrayOfArchives);
+        });
     };
 
     /**
@@ -680,7 +699,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         $("#prefix").val("");
         findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId);
         var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
-        pushBrowserHistoryState(dirEntry.url);
+        pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
         return false;
     }
     
@@ -746,7 +765,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         selectedArchive.resolveRedirect(dirEntry, readFile);
                     } else {
                         console.log("Reading binary file...");
-                        selectedArchive.readBinaryFile(dirEntry, function(readableTitle, content) {
+                        selectedArchive.readBinaryFile(dirEntry, function(fileDirEntry, content) {
                             messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': content});
                             console.log("content sent to ServiceWorker");
                         });
@@ -763,8 +782,12 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     };
     
     // Compile some regular expressions needed to modify links
-    var regexpImageLink = /^.?\/?[^:]+:(.*)/;
+    // Pattern to find the path in a url
     var regexpPath = /^(.*\/)[^\/]+$/;
+    // Pattern to find a ZIM URL (with its namespace) - see http://www.openzim.org/wiki/ZIM_file_format#Namespaces
+    var regexpZIMUrlWithNamespace = /(?:^|\/)([-ABIJMUVWX]\/.+)/;
+    // Pattern to match a local anchor in a href
+    var regexpLocalAnchorHref = /^#/;
     // These regular expressions match both relative and absolute URLs
     // Since late 2014, all ZIM files should use relative URLs
     var regexpImageUrl = /^(?:\.\.\/|\/)+(I\/.*)$/;
@@ -783,62 +806,61 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Scroll the iframe to its top
         $("#articleContent").contents().scrollTop(0);
 
+        if (contentInjectionMode === 'jquery') {
+            // Fast-replace img src with data-kiwixsrc [kiwix-js #272]
+            htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
+        }
         // Display the article inside the web page.
         $('#articleContent').contents().find('body').html(htmlArticle);
-        
         
         // If the ServiceWorker is not useable, we need to fallback to parse the DOM
         // to inject math images, and replace some links with javascript calls
         if (contentInjectionMode === 'jquery') {
+            
+            // Compute base URL
+            var urlPath = regexpPath.test(dirEntry.url) ? urlPath = dirEntry.url.match(regexpPath)[1] : "";
+            var baseUrl = dirEntry.namespace + "/" + urlPath;
+            // Create (or replace) the "base" tag with our base URL
+            $('#articleContent').contents().find('head').find("base").detach();
+            $('#articleContent').contents().find('head').append("<base href='" + baseUrl + "'>");
+            
+            var currentProtocol = location.protocol;
+            var currentHost = location.host;
 
             // Convert links into javascript calls
             $('#articleContent').contents().find('body').find('a').each(function() {
-                // Store current link's url
-                var url = $(this).attr("href");
-                if (url === null || url === undefined) {
-                    return;
+                var href = $(this).attr("href");
+                // Compute current link's url (with its namespace), if applicable
+                var zimUrl = regexpZIMUrlWithNamespace.test(this.href) ? this.href.match(regexpZIMUrlWithNamespace)[1] : "";
+                if (href === null || href === undefined) {
+                    // No href attribute
                 }
-                var lowerCaseUrl = url.toLowerCase();
-                var cssClass = $(this).attr("class");
-
-                if (cssClass === "new") {
-                    // It's a link to a missing article : display a message
+                else if (href.length === 0) {
+                    // It's a link with an empty href, pointing to the current page.
+                    // Because of the base tag, we need to modify it
                     $(this).on('click', function(e) {
-                        alert("Missing article in Wikipedia");
+                       return false; 
+                    });
+                }
+                else if (regexpLocalAnchorHref.test(href)) {
+                    // It's an anchor link : we need to make it work with javascript
+                    // because of the base tag
+                    $(this).on('click', function(e) {
+                        $('#articleContent').first()[0].contentWindow.location.hash = href;
                         return false;
                     });
                 }
-                else if (url.slice(0, 1) === "#") {
-                    // It's an anchor link : do nothing
-                }
-                else if (url.substring(0, 4) === "http") {
-                    // It's an external link : open in a new tab
-                    $(this).attr("target", "_blank");
-                }
-                else if (url.match(regexpImageLink)
-                    && (util.endsWith(lowerCaseUrl, ".png")
-                        || util.endsWith(lowerCaseUrl, ".svg")
-                        || util.endsWith(lowerCaseUrl, ".jpg")
-                        || util.endsWith(lowerCaseUrl, ".jpeg"))) {
-                    // It's a link to a file of Wikipedia : change the URL to the online version and open in a new tab
-                    var onlineWikipediaUrl = url.replace(regexpImageLink, "https://" + selectedArchive._language + ".wikipedia.org/wiki/File:$1");
-                    $(this).attr("href", onlineWikipediaUrl);
+                else if (this.protocol !== currentProtocol
+                    || this.host !== currentHost) {
+                    // It's an external URL : we should open it in a new tab
                     $(this).attr("target", "_blank");
                 }
                 else {
                     // It's a link to another article
                     // Add an onclick event to go to this article
                     // instead of following the link
-                    
-                    if (url.substring(0, 2) === "./") {
-                        url = url.substring(2);
-                    }
-                    // Remove the initial slash if it's an absolute URL
-                    else if (url.substring(0, 1) === "/") {
-                        url = url.substring(1);
-                    }
                     $(this).on('click', function(e) {
-                        var decodedURL = decodeURIComponent(url);
+                        var decodedURL = decodeURIComponent(zimUrl);
                         pushBrowserHistoryState(decodedURL);
                         goToArticle(decodedURL);
                         return false;
@@ -851,11 +873,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 var image = $(this);
                 // It's a standard image contained in the ZIM file
                 // We try to find its name (from an absolute or relative URL)
-                var imageMatch = image.attr("src").match(regexpImageUrl);
+                var imageMatch = image.attr("data-kiwixsrc").match(regexpImageUrl); //kiwix-js #272
                 if (imageMatch) {
                     var title = decodeURIComponent(imageMatch[1]);
                     selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
                             // TODO : use the complete MIME-type of the image (as read from the ZIM file)
                             uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
                         });
@@ -874,7 +896,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     // It's a CSS file contained in the ZIM file
                     var title = uiUtil.removeUrlParameters(decodeURIComponent(hrefMatch[1]));
                     selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
                             var cssContent = util.uintToString(content);
                             // For some reason, Firefox OS does not accept the syntax <link rel="stylesheet" href="data:text/css,...">
                             // So we replace the tag with a <style type="text/css">...</style>
@@ -917,7 +939,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         if (dirEntry === null)
                             console.log("Error: js file not found: " + title);
                         else
-                            selectedArchive.readBinaryFile(dirEntry, function (readableTitle, content) {
+                            selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
                                 // TODO : I have to disable javascript for now
                                 // var jsContent = encodeURIComponent(util.uintToString(content));
                                 //script.attr("src", 'data:text/javascript;charset=UTF-8,' + jsContent);
@@ -985,7 +1007,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             else {
                 if (dirEntry.namespace === 'A') {
                     $("#articleName").html(dirEntry.title);
-                    pushBrowserHistoryState(dirEntry.url);
+                    pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
                     readArticle(dirEntry);
@@ -1003,17 +1025,19 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         selectedArchive.getMainPageDirEntry(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 console.error("Error finding main article.");
+                $("#welcomeText").show();
             }
             else {
                 if (dirEntry.namespace === 'A') {
                     $("#articleName").html(dirEntry.title);
-                    pushBrowserHistoryState(dirEntry.url);
+                    pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
                     readArticle(dirEntry);
                 }
                 else {
                     console.error("The main page of this archive does not seem to be an article");
+                    $("#welcomeText").show();
                 }
             }
         });

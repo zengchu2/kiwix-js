@@ -1,7 +1,7 @@
 #!/bin/bash
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"/..
 echo "BASEDIR is $BASEDIR"
-cd $BASEDIR
+cd "$BASEDIR"
 
 # Reading arguments
 while getopts tdv: option; do
@@ -12,8 +12,8 @@ while getopts tdv: option; do
     esac
 done
 
-MAJOR_NUMERIC_VERSION="2.1"
-VERSION_TO_REPLACE="2\.1-WIP"
+MAJOR_NUMERIC_VERSION="2.2"
+VERSION_TO_REPLACE="2\.2-WIP"
 
 # Set the secret environment variables if available
 # The file set_secret_environment_variables.sh should not be commited for security reasons
@@ -26,13 +26,22 @@ fi
 # Use the passed version number, else use the commit id
 if [ ! "${VERSION}zz" == "zz" ]; then
     echo "Packaging version $VERSION because it has been passed as an argument"
+    VERSION_FOR_MOZILLA_MANIFEST="$VERSION"
     if [ ! "${TAG}zz" == "zz" ]; then
         echo "This version is a tag : we're releasing a public version"
     fi
 else
     COMMIT_ID=$(git rev-parse --short HEAD)
     VERSION="${MAJOR_NUMERIC_VERSION}commit-${COMMIT_ID}"
+    # Mozilla needs a unique version string for each version it signs
+    # and we have to comply with their version string : https://developer.mozilla.org/en-US/docs/Mozilla/Toolkit_version_format
+    # So we need to replace every number of the commit id by another string (with 32 cars max)
+    # We are allowed only a few special caracters : +*.-_ so we prefered to use capital letters
+    # (hopping this string is case-sensitive)
+    COMMIT_ID_FOR_MOZILLA_MANIFEST=$(echo $COMMIT_ID | tr '[0123456789]' '[ABCDEFGHIJ]')
+    VERSION_FOR_MOZILLA_MANIFEST="${MAJOR_NUMERIC_VERSION}commit${COMMIT_ID_FOR_MOZILLA_MANIFEST}"
     echo "Packaging version $VERSION"
+    echo "Version string for Mozilla extension signing : $VERSION_FOR_MOZILLA_MANIFEST"
 fi
 
 # Copy only the necessary files in a temporary directory
@@ -56,12 +65,15 @@ rm -rf build/*
 # Package for Chromium/Chrome
 scripts/package_chrome_extension.sh $DRYRUN $TAG -v $VERSION
 # Package for Firefox and Firefox OS
-# We have to put the real version string inside the manifest.json (which Chrome might not have accepted)
+# We have to put a unique version string inside the manifest.json (which Chrome might not have accepted)
 # So we take the original manifest again, and replace the version inside it again
 cp manifest.json tmp/
-sed -i -e "s/$VERSION_TO_REPLACE/$VERSION/" tmp/manifest.json
+sed -i -e "s/$VERSION_TO_REPLACE/$VERSION_FOR_MOZILLA_MANIFEST/" tmp/manifest.json
 scripts/package_firefox_extension.sh $DRYRUN $TAG -v $VERSION
 scripts/package_firefoxos_app.sh $DRYRUN $TAG -v $VERSION
+cp -f ubuntu_touch/* tmp/
+sed -i -e "s/$VERSION_TO_REPLACE/$VERSION/" tmp/manifest.json
+scripts/package_ubuntu_touch_app.sh $DRYRUN $TAG -v $VERSION
 
 if [ "${DRYRUN}zz" == "zz" ]; then
     CURRENT_DATE=$(date +'%Y-%m-%d')
