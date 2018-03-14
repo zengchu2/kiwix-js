@@ -748,9 +748,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             selectedArchive.resolveRedirect(dirEntry, readArticle);
         }
         else {
-            //Void the iframe
-            document.getElementById("articleContent").src = "dummyArticle.html";
-            selectedArchive.readArticle(dirEntry, displayArticleInForm);
+            selectedArchive.readArticle(dirEntry, voidIframe); 
         }
     }
     
@@ -819,6 +817,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     // It significantly speeds up subsequent page display. See kiwix-js issue #335
     var cssCache = new Map();
 
+    // Voids the iframe in order to clear out scripts and other state
+    function voidIframe(dirEntry, htmlArticle) {
+        var iframe = document.getElementById("articleContent");
+        iframe.onreadystatechange = displayArticleInForm(dirEntry, htmlArticle);
+        iframe.src = "dummyArticle.html";
+    }
+    
     /**
      * Display the the given HTML article in the web page,
      * and convert links to javascript calls
