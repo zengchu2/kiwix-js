@@ -842,30 +842,33 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         htmlArticle = htmlArticle.replace(/(<head[^>]*>\s*)/i, '$1<base href="' + baseUrl + '" />\r\n');
         
         // Tell jQuery we're removing the iframe document: clears jQuery cache and prevents memory leaks [kiwix-js #361]
-        $('#articleContent').empty();
+        $('#articleContent').contents().remove();
         
-        var iframe = document.getElementById('articleContent');
-        var articleContent = iframe.contentDocument;
-        
-        iframe.onload = function() {
-            // DEV: Check if line below is still needed for Service Worker
-                iframe.onload = function(){};
-            pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
-            // If the ServiceWorker is not useable, we need to fallback to parse the DOM
-            // to inject images, CSS etc, and replace links with javascript calls
-            if (contentInjectionMode === 'jquery') {
+        var iframeArticleContent = document.getElementById('articleContent');
+            
+        // If the ServiceWorker mode is not useable, we need to fallback to parse the DOM
+        // to inject images, CSS etc, and replace links with javascript calls
+        if (contentInjectionMode === 'jquery') {
+            iframeArticleContent.onload = function() {
                 parseAnchorsJQuery();
                 loadImagesJQuery();
                 loadCSSJQuery();
                 //JavaScript loading currently disabled
                 //loadJavaScriptJQuery();            
-            }
-        };
+            };
+        }
+        else {
+            // Removes the onload in case the user switches from jquery to serviceworker mode
+            iframeArticleContent.onload = function() {};
+        }
      
         // Completely void iframe [kiwix-js #341] and inject new article (NB iframe.onload runs *after* this)
-        articleContent.open('text/html', 'replace'); // Prevents incorrect history state in Firefox [kiwix-js #366] 
-        articleContent.write(htmlArticle);
-        articleContent.close();
+        var articleContentDocument = iframeArticleContent.contentDocument;
+        articleContentDocument.open('text/html', 'replace'); // Prevents incorrect history state in Firefox [kiwix-js #366] 
+        articleContentDocument.write(htmlArticle);
+        articleContentDocument.close();
+        
+        pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
 
         function parseAnchorsJQuery() {
             var currentProtocol = location.protocol;
@@ -1042,7 +1045,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 $('#articleContent').contents().find('body').html("");
                 readArticle(dirEntry);
             }
-        }).fail(function() { alert("Error reading article with title " + title); });
+        }).fail(function(e) { alert("Error reading article with title " + title + " : " + e); });
     }
     
     function goToRandomArticle() {
