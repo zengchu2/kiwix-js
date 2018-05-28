@@ -743,11 +743,23 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry
      */
     function readArticle(dirEntry) {
-        if (dirEntry.isRedirect()) {
-            selectedArchive.resolveRedirect(dirEntry, readArticle);
+        if (contentInjectionMode !== 'jquery') {
+            var iframeArticleContent = document.getElementById('articleContent');
+            iframeArticleContent.onload = function () {
+                iframeArticleContent.onload = function () {};
+                // Actually display the iframe content
+                $("#readingArticle").hide();
+                $("#articleContent").show();
+            };
+            iframeArticleContent.src = dirEntry.namespace + "/" + dirEntry.url;
         }
         else {
-            selectedArchive.readUtf8File(dirEntry, displayArticleInForm);
+            if (dirEntry.isRedirect()) {
+                selectedArchive.resolveRedirect(dirEntry, readArticle);
+            }
+            else {
+                selectedArchive.readUtf8File(dirEntry, displayArticleInForm);
+            }
         }
     }
     
