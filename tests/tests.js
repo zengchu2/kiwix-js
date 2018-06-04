@@ -19,8 +19,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Kiwix (file LICENSE-GPLv3.txt).  If not, see <http://www.gnu.org/licenses/>
  */
-define(['jquery', 'zimArchive', 'zimDirEntry', 'util', 'utf8'],
- function($, zimArchive, zimDirEntry, util, utf8) {
+define(['jquery', 'zimArchive', 'zimDirEntry', 'util', 'uiUtil', 'utf8'],
+ function($, zimArchive, zimDirEntry, util, uiUtil, utf8) {
     
     var localZimArchive;
 
@@ -119,6 +119,16 @@ define(['jquery', 'zimArchive', 'zimDirEntry', 'util', 'utf8'],
             var expectedArray = [{title:"a"}, {title:"b"}, {title:"c"}, {title:"d"}];
             assert.deepEqual(util.removeDuplicateTitlesInDirEntryArray(array), expectedArray, "Duplicates should be removed from the array");
         });
+        QUnit.test("check removal of parameters in URL", function(assert) {
+            var testUrl1 = "A/question.html";
+            var testUrl2 = "A/question.html?param1=toto&param2=titi";
+            var testUrl3 = "A/question.html?param1=toto&param2=titi#anchor";
+            var testUrl4 = "A/question.html#anchor";
+            assert.equal(uiUtil.removeUrlParameters(testUrl1), testUrl1);
+            assert.equal(uiUtil.removeUrlParameters(testUrl2), testUrl1);
+            assert.equal(uiUtil.removeUrlParameters(testUrl3), testUrl1);
+            assert.equal(uiUtil.removeUrlParameters(testUrl4), testUrl1);
+        });
         
         QUnit.module("ZIM initialisation");
         QUnit.test("ZIM archive is ready", function(assert) {
@@ -138,7 +148,7 @@ define(['jquery', 'zimArchive', 'zimDirEntry', 'util', 'utf8'],
                 assert.ok(htmlArticle.match("^.*<h1[^>]*>A Fool for You</h1>"), "'A Fool for You' title somewhere in the article");
                 done();
             };
-            localZimArchive.readArticle(aFoolForYouDirEntry, callbackFunction);
+            localZimArchive.readUtf8File(aFoolForYouDirEntry, callbackFunction);
         });
         QUnit.test("check findDirEntriesWithPrefix 'A'", function(assert) {
             var done = assert.async();            
@@ -315,7 +325,7 @@ define(['jquery', 'zimArchive', 'zimDirEntry', 'util', 'utf8'],
                 assert.ok(dirEntry !== null, "Title found");
                 if (dirEntry !== null) {
                     assert.equal(dirEntry.namespace +"/"+ dirEntry.url, "A/Ray_Charles.html", "URL is correct.");
-                    localZimArchive.readArticle(dirEntry, function(dirEntry2, data) {
+                    localZimArchive.readUtf8File(dirEntry, function(dirEntry2, data) {
                         assert.equal(dirEntry2.title, "Ray Charles", "Title is correct.");
                         assert.equal(data.length, 157186, "Data length is correct.");
                         assert.equal(data.indexOf("the only true genius in show business"), 5535, "Specific substring at beginning found.");

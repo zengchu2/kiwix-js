@@ -36,7 +36,7 @@ self.addEventListener('activate', function(event) {
     console.log("ServiceWorker activated");
 });
 
-var regexpRemoveUrlParameters = new RegExp(/([^\?]+)\?.*$/);
+var regexpRemoveUrlParameters = new RegExp(/([^?#]+)[?#].*$/);
 
 // This function is duplicated from uiUtil.js
 // because using requirejs would force to add the 'fetch' event listener
@@ -44,12 +44,14 @@ var regexpRemoveUrlParameters = new RegExp(/([^\?]+)\?.*$/);
 // in recent versions of the browsers.
 // Cf https://bugzilla.mozilla.org/show_bug.cgi?id=1181127
 // TODO : find a way to avoid this duplication
+
+/**
+ * Removes parameters and anchors from a URL
+ * @param {type} url
+ * @returns {String} same URL without its parameters and anchors
+ */
 function removeUrlParameters(url) {
-    if (regexpRemoveUrlParameters.test(url)) {
-        return regexpRemoveUrlParameters.exec(url)[1];
-    } else {
-        return url;
-    }
+    return url.replace(regexpRemoveUrlParameters, "$1");
 }
     
 console.log("ServiceWorker startup");
@@ -85,15 +87,12 @@ var regexpCSS = new RegExp(/\.css$/i);
 
 // Pattern for ZIM file namespace - see http://www.openzim.org/wiki/ZIM_file_format#Namespaces
 var regexpZIMUrlWithNamespace = new RegExp(/(?:^|\/)([-ABIJMUVWX])\/(.+)/);
-var regexpDummyArticle = new RegExp(/dummyArticle\.html$/);
 
 function fetchEventListener(event) {
     if (fetchCaptureEnabled) {
         console.log('ServiceWorker handling fetch event for : ' + event.request.url);
 
-        // TODO handle the dummy article more properly
-        if (regexpZIMUrlWithNamespace.test(event.request.url)
-            && !regexpDummyArticle.test(event.request.url)) {
+        if (regexpZIMUrlWithNamespace.test(event.request.url)) {
 
             console.log('Asking app.js for a content', event.request.url);
             event.respondWith(new Promise(function(resolve, reject) {
@@ -165,6 +164,9 @@ function fetchEventListener(event) {
 
                         console.log('ServiceWorker responding to the HTTP request for ' + titleWithNameSpace + ' (size=' + event.data.content.length + ' octets)' , httpResponse);
                         resolve(httpResponse);
+                    }
+                    else if (event.data.action === 'sendRedirect') {
+                        resolve(Response.redirect(event.data.redirectUrl));
                     }
                     else {
                         console.log('Invalid message received from app.js for ' + titleWithNameSpace, event.data);

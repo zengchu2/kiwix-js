@@ -529,12 +529,23 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         + " storages found with getDeviceStorages instead of 1");
                 }
             }
+            resetCssCache();
             selectedArchive = zimArchiveLoader.loadArchiveFromDeviceStorage(selectedStorage, archiveDirectory, function (archive) {
                 cookies.setItem("lastSelectedArchive", archiveDirectory, Infinity);
                 // The archive is set : go back to home page to start searching
                 $("#btnHome").click();
             });
             
+        }
+    }
+    
+    /**
+     * Resets the CSS Cache (used only in jQuery mode)
+     */
+    function resetCssCache() {
+        // Reset the cssCache. Must be done when archive changes.
+        if (cssCache) {
+            cssCache = new Map();
         }
     }
 
@@ -547,6 +558,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     function setLocalArchiveFromFileList(files) {
+        resetCssCache();
         selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
             // The archive is set : go back to home page to start searching
             $("#btnHome").click();
@@ -699,7 +711,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         $("#prefix").val("");
         findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId);
         var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
-        pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
         return false;
     }
     
@@ -732,11 +743,26 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry
      */
     function readArticle(dirEntry) {
-        if (dirEntry.isRedirect()) {
-            selectedArchive.resolveRedirect(dirEntry, readArticle);
+        if (contentInjectionMode === 'serviceworker') {
+            // In ServiceWorker mode, we simply set the iframe src and show it when it's ready.
+            // (reading the backend is handled by the ServiceWorker itself)
+            var iframeArticleContent = document.getElementById('articleContent');
+            iframeArticleContent.onload = function () {
+                iframeArticleContent.onload = function () {};
+                // Actually display the iframe content
+                $("#readingArticle").hide();
+                $("#articleContent").show();
+            };
+            iframeArticleContent.src = dirEntry.namespace + "/" + dirEntry.url;
         }
         else {
-            selectedArchive.readArticle(dirEntry, displayArticleInForm);
+            // In jQuery mode, we read the article content in the backend and manually insert it in the iframe
+            if (dirEntry.isRedirect()) {
+                selectedArchive.resolveRedirect(dirEntry, readArticle);
+            }
+            else {
+                selectedArchive.readUtf8File(dirEntry, displayArticleContentInIframe);
+            }
         }
     }
     
@@ -762,7 +788,15 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                         console.error("Title " + title + " not found in archive.");
                         messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': ''});
                     } else if (dirEntry.isRedirect()) {
-                        selectedArchive.resolveRedirect(dirEntry, readFile);
+                        selectedArchive.resolveRedirect(dirEntry, function(resolvedDirEntry) {
+                            var redirectURL = resolvedDirEntry.namespace + "/" +resolvedDirEntry.url;
+                            // Ask the ServiceWork to send an HTTP redirect to the browser.
+                            // We could send the final content directly, but it is necessary to let the browser know in which directory it ends up.
+                            // Else, if the redirect URL is in a different directory than the original URL,
+                            // the relative links in the HTML content would fail. See #312
+                            messagePort.postMessage({'action':'sendRedirect', 'title':title, 'redirectUrl': redirectURL});
+                            console.log("redirect to " + redirectURL + " sent to ServiceWorker");                            
+                        });
                     } else {
                         console.log("Reading binary file...");
                         selectedArchive.readBinaryFile(dirEntry, function(fileDirEntry, content) {
@@ -788,10 +822,16 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     var regexpZIMUrlWithNamespace = /(?:^|\/)([-ABIJMUVWX]\/.+)/;
     // Pattern to match a local anchor in a href
     var regexpLocalAnchorHref = /^#/;
-    // These regular expressions match both relative and absolute URLs
-    // Since late 2014, all ZIM files should use relative URLs
-    var regexpImageUrl = /^(?:\.\.\/|\/)+(I\/.*)$/;
-    var regexpMetadataUrl = /^(?:\.\.\/|\/)+(-\/.*)$/;
+    // Regex below finds images, scripts and stylesheets with ZIM-type metadata and image namespaces [kiwix-js #378]
+    // It first searches for <img, <script, or <link, then scans forward to find, on a word boundary, either src=["'] 
+    // OR href=["'] (ignoring any extra whitespace), and it then tests everything up to the next ["'] against a pattern that
+    // matches ZIM URLs with namespaces [-I] ("-" = metadata or "I" = image). Finally it removes the relative or absolute path. 
+    // DEV: If you want to support more namespaces, add them to the END of the character set [-I] (not to the beginning) 
+    var regexpTagsWithZimUrl = /(<(?:img|script|link)\s+[^>]*?\b)(?:src|href)(\s*=\s*["']\s*)(?:\.\.\/|\/)+([-I]\/[^"']*)/ig;
+    
+    // Cache for CSS styles contained in ZIM.
+    // It significantly speeds up subsequent page display. See kiwix-js issue #335
+    var cssCache = new Map();
 
     /**
      * Display the the given HTML article in the web page,
@@ -800,34 +840,52 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry
      * @param {String} htmlArticle
      */
-    function displayArticleInForm(dirEntry, htmlArticle) {
-        $("#readingArticle").hide();
-        $("#articleContent").show();
+    function displayArticleContentInIframe(dirEntry, htmlArticle) {
         // Scroll the iframe to its top
         $("#articleContent").contents().scrollTop(0);
 
-        if (contentInjectionMode === 'jquery') {
-            // Fast-replace img src with data-kiwixsrc [kiwix-js #272]
-            htmlArticle = htmlArticle.replace(/(<img\s+[^>]*\b)src(\s*=)/ig, "$1data-kiwixsrc$2");
-        }
-        // Display the article inside the web page.
-        $('#articleContent').contents().find('body').html(htmlArticle);
+        // Replaces ZIM-style URLs of img, script and link tags with a data-url to prevent 404 errors [kiwix-js #272 #376]
+        // This replacement also processes the URL to remove the path so that the URL is ready for subsequent jQuery functions
+        htmlArticle = htmlArticle.replace(regexpTagsWithZimUrl, "$1data-kiwixurl$2$3");            
+
+        // Compute base URL
+        var urlPath = regexpPath.test(dirEntry.url) ? urlPath = dirEntry.url.match(regexpPath)[1] : '';
+        var baseUrl = dirEntry.namespace + '/' + urlPath;
+
+        // Inject base tag into html
+        htmlArticle = htmlArticle.replace(/(<head[^>]*>\s*)/i, '$1<base href="' + baseUrl + '" />\r\n');
+        // Extract any css classes from the html tag (they will be stripped when injected in iframe with .innerHTML)
+        var htmlCSS = htmlArticle.match(/<html[^>]*class\s*=\s*["']\s*([^"']+)/i);
+        htmlCSS = htmlCSS ? htmlCSS[1] : '';
         
-        // If the ServiceWorker is not useable, we need to fallback to parse the DOM
-        // to inject math images, and replace some links with javascript calls
-        if (contentInjectionMode === 'jquery') {
+        // Tell jQuery we're removing the iframe document: clears jQuery cache and prevents memory leaks [kiwix-js #361]
+        $('#articleContent').contents().remove();
+        
+        var iframeArticleContent = document.getElementById('articleContent');
+        
+        iframeArticleContent.onload = function() {
+            iframeArticleContent.onload = function(){};
+            // Inject the new article's HTML into the iframe
+            var articleContent = iframeArticleContent.contentDocument.documentElement;
+            articleContent.innerHTML = htmlArticle;
+            // Add any missing classes stripped from the <html> tag
+            if (htmlCSS) articleContent.getElementsByTagName('body')[0].classList.add(htmlCSS);
+            // Allow back/forward in browser history
+            pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
             
-            // Compute base URL
-            var urlPath = regexpPath.test(dirEntry.url) ? urlPath = dirEntry.url.match(regexpPath)[1] : "";
-            var baseUrl = dirEntry.namespace + "/" + urlPath;
-            // Create (or replace) the "base" tag with our base URL
-            $('#articleContent').contents().find('head').find("base").detach();
-            $('#articleContent').contents().find('head').append("<base href='" + baseUrl + "'>");
-            
+            parseAnchorsJQuery();
+            loadImagesJQuery();
+            loadCSSJQuery();
+            //JavaScript loading currently disabled
+            //loadJavaScriptJQuery();            
+        };
+     
+        // Load the blank article to clear the iframe (NB iframe onload event runs *after* this)
+        iframeArticleContent.src = "article.html";
+
+        function parseAnchorsJQuery() {
             var currentProtocol = location.protocol;
             var currentHost = location.host;
-
-            // Convert links into javascript calls
             $('#articleContent').contents().find('body').find('a').each(function() {
                 var href = $(this).attr("href");
                 // Compute current link's url (with its namespace), if applicable
@@ -861,96 +919,105 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                     // instead of following the link
                     $(this).on('click', function(e) {
                         var decodedURL = decodeURIComponent(zimUrl);
-                        pushBrowserHistoryState(decodedURL);
                         goToArticle(decodedURL);
                         return false;
                     });
                 }
             });
-
-            // Load images
-            $('#articleContent').contents().find('body').find('img').each(function() {
+        }
+        
+        function loadImagesJQuery() {
+            $('#articleContent').contents().find('body').find('img[data-kiwixurl]').each(function() {
                 var image = $(this);
-                // It's a standard image contained in the ZIM file
-                // We try to find its name (from an absolute or relative URL)
-                var imageMatch = image.attr("data-kiwixsrc").match(regexpImageUrl); //kiwix-js #272
-                if (imageMatch) {
-                    var title = decodeURIComponent(imageMatch[1]);
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
-                            // TODO : use the complete MIME-type of the image (as read from the ZIM file)
-                            uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
-                        });
-                    }).fail(function (e) {
-                        console.error("could not find DirEntry for image:" + title, e);
+                var imageUrl = image.attr("data-kiwixurl");
+                var title = decodeURIComponent(imageUrl);
+                selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                    selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
+                        // TODO : use the complete MIME-type of the image (as read from the ZIM file)
+                        uiUtil.feedNodeWithBlob(image, 'src', content, 'image');
                     });
-                }
+                }).fail(function (e) {
+                    console.error("could not find DirEntry for image:" + title, e);
+                });
             });
+        }
 
-            // Load CSS content
-            $('#articleContent').contents().find('link[rel=stylesheet]').each(function() {
+        function loadCSSJQuery() {
+            // Ensure all sections are open for clients that lack JavaScript support, or that have some restrictive CSP [kiwix-js #355].
+            // This is needed only for some versions of ZIM files generated by mwoffliner (at least in early 2018), where the article sections are closed by default on small screens.
+            // These sections can be opened by clicking on them, but this is done with some javascript.
+            // The code below is a workaround, a better fix is tracked on [mwoffliner #324]
+            var iframe = document.getElementById('articleContent').contentDocument;
+            var collapsedBlocks = iframe.querySelectorAll('.collapsible-block:not(.open-block), .collapsible-heading:not(.open-block)');
+            // Using decrementing loop to optimize performance : see https://stackoverflow.com/questions/3520688 
+            for (var i = collapsedBlocks.length; i--;) {
+                collapsedBlocks[i].classList.add('open-block');
+            }
+
+            var cssCount = 0;
+            var cssFulfilled = 0;
+            $('#articleContent').contents().find('link[data-kiwixurl]').each(function () {
+                cssCount++;
                 var link = $(this);
-                // We try to find its name (from an absolute or relative URL)
-                var hrefMatch = link.attr("href").match(regexpMetadataUrl);
-                if (hrefMatch) {
-                    // It's a CSS file contained in the ZIM file
-                    var title = uiUtil.removeUrlParameters(decodeURIComponent(hrefMatch[1]));
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
-                            var cssContent = util.uintToString(content);
-                            // For some reason, Firefox OS does not accept the syntax <link rel="stylesheet" href="data:text/css,...">
-                            // So we replace the tag with a <style type="text/css">...</style>
-                            // while copying some attributes of the original tag
-                            // Cf http://jonraasch.com/blog/javascript-style-node
-                            var cssElement = document.createElement('style');
-                            cssElement.type = 'text/css';
-
-                            if (cssElement.styleSheet) {
-                                cssElement.styleSheet.cssText = cssContent;
-                            } else {
-                                cssElement.appendChild(document.createTextNode(cssContent));
+                var linkUrl = link.attr("data-kiwixurl");
+                var title = uiUtil.removeUrlParameters(decodeURIComponent(linkUrl));
+                if (cssCache.has(title)) {
+                    var cssContent = cssCache.get(title);
+                    uiUtil.replaceCSSLinkWithInlineCSS(link, cssContent);
+                    cssFulfilled++;
+                } else {
+                    $('#cachingCSS').show();
+                    selectedArchive.getDirEntryByTitle(title)
+                    .then(function (dirEntry) {
+                        return selectedArchive.readUtf8File(dirEntry,
+                            function (fileDirEntry, content) {
+                                var fullUrl = fileDirEntry.namespace + "/" + fileDirEntry.url;
+                                cssCache.set(fullUrl, content);
+                                uiUtil.replaceCSSLinkWithInlineCSS(link, content);
+                                cssFulfilled++;
+                                renderIfCSSFulfilled();
                             }
-                            var mediaAttributeValue = link.attr('media');
-                            if (mediaAttributeValue) {
-                                cssElement.media = mediaAttributeValue;
-                            }
-                            var disabledAttributeValue = link.attr('media');
-                            if (disabledAttributeValue) {
-                                cssElement.disabled = disabledAttributeValue;
-                            }
-                            link.replaceWith(cssElement);
-                        });
+                        );
                     }).fail(function (e) {
                         console.error("could not find DirEntry for CSS : " + title, e);
+                        cssCount--;
+                        renderIfCSSFulfilled();
                     });
                 }
             });
+            renderIfCSSFulfilled();
 
-            // Load Javascript content
-            $('#articleContent').contents().find('script').each(function() {
+            // Some pages are extremely heavy to render, so we prevent rendering by keeping the iframe hidden
+            // until all CSS content is available [kiwix-js #381]
+            function renderIfCSSFulfilled() {
+                if (cssFulfilled >= cssCount) {
+                    $('#cachingCSS').hide();
+                    $('#readingArticle').hide();
+                    $('#articleContent').show();
+                }
+            }
+        }
+
+        function loadJavaScriptJQuery() {
+            $('#articleContent').contents().find('script[data-kiwixurl]').each(function() {
                 var script = $(this);
-                // We try to find its name (from an absolute or relative URL)
-                var srcMatch = script.attr("src").match(regexpMetadataUrl);
+                var scriptUrl = script.attr("data-kiwixurl");
                 // TODO check that the type of the script is text/javascript or application/javascript
-                if (srcMatch) {
-                    // It's a Javascript file contained in the ZIM file
-                    var title = uiUtil.removeUrlParameters(decodeURIComponent(srcMatch[1]));
-                    selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
-                        if (dirEntry === null)
-                            console.log("Error: js file not found: " + title);
-                        else
-                            selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
-                                // TODO : I have to disable javascript for now
-                                // var jsContent = encodeURIComponent(util.uintToString(content));
-                                //script.attr("src", 'data:text/javascript;charset=UTF-8,' + jsContent);
-                            });
-                    }).fail(function (e) {
-                        console.error("could not find DirEntry for javascript : " + title, e);
-                    });
-                }
+                var title = uiUtil.removeUrlParameters(decodeURIComponent(scriptUrl));
+                selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
+                    if (dirEntry === null) {
+                        console.log("Error: js file not found: " + title);
+                    } else {
+                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
+                            // TODO : JavaScript support not yet functional [kiwix-js #152]
+                            uiUtil.feedNodeWithBlob(script, 'src', content, 'text/javascript');
+                        });
+                    }
+                }).fail(function (e) {
+                    console.error("could not find DirEntry for javascript : " + title, e);
+                });
             });
-
-        }  
+        }
     }
 
     /**
@@ -964,6 +1031,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         var urlParameters;
         var stateLabel;
         if (title && !(""===title)) {
+            // Prevents creating a double history for the same page
+            if (history.state && history.state.title === title) return;
             stateObj.title = title;
             urlParameters = "?title=" + title;
             stateLabel = "Wikipedia Article : " + title;
@@ -985,6 +1054,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {String} title
      */
     function goToArticle(title) {
+        title = uiUtil.removeUrlParameters(title);
         selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 $("#readingArticle").hide();
@@ -996,7 +1066,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 $('#articleContent').contents().find('body').html("");
                 readArticle(dirEntry);
             }
-        }).fail(function() { alert("Error reading article with title " + title); });
+        }).fail(function(e) { alert("Error reading article with title " + title + " : " + e); });
     }
     
     function goToRandomArticle() {
@@ -1007,7 +1077,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             else {
                 if (dirEntry.namespace === 'A') {
                     $("#articleName").html(dirEntry.title);
-                    pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
                     readArticle(dirEntry);
@@ -1030,7 +1099,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             else {
                 if (dirEntry.namespace === 'A') {
                     $("#articleName").html(dirEntry.title);
-                    pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
                     $("#readingArticle").show();
                     $('#articleContent').contents().find('body').html("");
                     readArticle(dirEntry);
