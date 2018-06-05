@@ -892,8 +892,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
             
             parseAnchorsJQuery();
-            loadImagesJQuery();
             loadCSSJQuery();
+            loadImagesJQuery();
             //JavaScript loading currently disabled
             //loadJavaScriptJQuery();            
         };
