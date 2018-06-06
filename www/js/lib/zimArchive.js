@@ -238,7 +238,7 @@ define(['zimfile', 'zimDirEntry', 'util', 'utf8'],
         if (xzJobs < MAX_DECOMPRESSOR_JOBS) {
             return callback(dirEntry);
         } else {
-            setTimeout(xzAwait, 300, dirEntry, callback);
+            setTimeout(xzAwait, 100 * xzJobs, dirEntry, callback);
         }
     }
 
