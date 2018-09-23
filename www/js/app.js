@@ -584,7 +584,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         resetCssCache();
         selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
             // The archive is set : go back to home page to start searching
-            $("#btnHome").click();
+            //$("#btnHome").click();
+            libzimWebWorker.postMessage({action: "init", files: selectedArchive._file._files});
         });
     }
     /**
@@ -790,6 +791,10 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     
     var messageChannel;
     
+    var libzimWebWorker = new Worker("a.out.js");
+    
+    var libzimAlreadyUsed = false;
+    
     /**
      * Function that handles a message of the messageChannel.
      * It tries to read the content in the backend, and sends it back to the ServiceWorker
@@ -819,12 +824,24 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                             messagePort.postMessage({'action':'sendRedirect', 'title':title, 'redirectUrl': redirectURL});
                         });
                     } else {
-                        // Let's read the content in the ZIM file
-                        selectedArchive.readBinaryFile(dirEntry, function(fileDirEntry, content) {
-                            // Let's send the content to the ServiceWorker
-                            var message = {'action': 'giveContent', 'title' : title, 'content': content.buffer};
-                            messagePort.postMessage(message, [content.buffer]);
-                        });
+                        if (!libzimAlreadyUsed) {
+                            console.log("Reading binary file from libzim...");
+                            var tmpMessageChannel = new MessageChannel();
+                            tmpMessageChannel.port1.onmessage = function(event2){
+                                console.log("response given by the libzim webworker", event2.data);
+                                var message = {'action': 'giveContent', 'title' : title, 'content': event2.data};
+                                messagePort.postMessage(message);
+                            };
+                            libzimWebWorker.postMessage({action: "callC", files: selectedArchive._file._files, url: dirEntry.namespace + "/" + dirEntry.url}, [tmpMessageChannel.port2]);
+                            libzimAlreadyUsed = true;
+                        }
+                        else {
+                            console.log("Reading binary file from legacy backend...");
+                            selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
+                                var message = {'action': 'giveContent', 'title': title, 'content': content.buffer};
+                                messagePort.postMessage(message, [content.buffer]);
+                            });
+                        }
                     }
                 };
                 selectedArchive.getDirEntryByTitle(title).then(readFile).fail(function() {
