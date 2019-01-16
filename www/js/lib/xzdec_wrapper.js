@@ -25,6 +25,18 @@ define(['q'], function(q) {
     xzdec._init();
     
     /**
+     * Number of milliseconds to wait for the decompressor to be available for another chunk
+     * @type Integer
+     */
+    var DELAY_WAITING_IDLE_DECOMPRESSOR = 50;
+    
+    /**
+     * Is the decompressor already working?
+     * @type Boolean
+     */
+    var busy = false;
+    
+    /**
      * @typedef Decompressor
      * @property {Integer} _chunkSize
      * @property {FileReader} _reader
@@ -51,6 +63,7 @@ define(['q'], function(q) {
      * @param {Integer} length
      */
     Decompressor.prototype.readSlice = function(offset, length) {
+        busy = true;
         var that = this;
         this._inStreamPos = 0;
         this._outStreamPos = 0;
@@ -59,8 +72,36 @@ define(['q'], function(q) {
         this._outBufferPos = 0;
         return this._readLoop(offset, length).then(function(data) {
             xzdec._release(that._decHandle);
+            busy = false;
             return data;
         });
+    };
+    
+    /**
+     * Read length bytes, offset into the decompressed stream.
+     * This function ensures that only one decompression runs at a time.
+     * 
+     * @param {Integer} offset
+     * @param {Integer} length
+     */
+    Decompressor.prototype.readSliceSingleThread = function(offset, length) {
+        if (!busy) {
+            return this.readSlice(offset, length);
+        }
+        else {
+            // The decompressor is already in progress.
+            // To avoid using too much memory, we wait until it has finished
+            // before using it for another decompression.
+            // Inspired by https://codereview.stackexchange.com/questions/145563/angularjs-recursive-function-call-with-timeout
+            var that = this;
+            var deferred = q.defer();
+
+            setTimeout(function(){
+                that.readSliceSingleThread(offset, length).then(deferred.resolve, deferred.reject);
+            }, DELAY_WAITING_IDLE_DECOMPRESSOR);
+
+            return deferred.promise;
+        }
     };
 
     /**
@@ -115,7 +156,8 @@ define(['q'], function(q) {
         return this._reader(this._inStreamPos, this._chunkSize).then(function(data) {
             if (data.length > that._chunkSize)
                 data = data.slice(0, that._chunkSize);
-            xzdec.writeArrayToMemory(data, xzdec._get_in_buffer(that._decHandle));
+            // For some reason, xzdec.writeArrayToMemory does not seem to be available, and is equivalent to xzdec.HEAP8.set
+            xzdec.HEAP8.set(data, xzdec._get_in_buffer(that._decHandle));
             that._inStreamPos += data.length;
             xzdec._set_new_input(that._decHandle, data.length);
             return 0;

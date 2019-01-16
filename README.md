@@ -1,25 +1,25 @@
 # Kiwix JS
 
 ## Summary
-Kiwix is an offline Wikipedia viewer. See the official site: http://www.kiwix.org/
+Kiwix is an offline Wikipedia viewer. See the official site: https://www.kiwix.org/
 
 This is a browser extension developed in HTML5/Javascript.
 
 You can search among the article titles, and read any of them without any Internet access.
 All the content of Wikipedia is inside your device (including the images).
-It might also works with other content in the OpenZIM format: http://www.openzim.org/wiki/OpenZIM , but has been only tested on the Mediawiki-based (wikipedia, wikivoyage etc) and StackExchange ZIM files.
+It might also works with other content in the OpenZIM format: https://wiki.openzim.org/wiki/OpenZIM , but has been only tested on the Mediawiki-based (wikipedia, wikivoyage etc) and StackExchange ZIM files.
 
 If your Internet access is expensive/rare/slow/unreliable/watched/censored, you still can browse this amazing repository of knowledge and culture.
 
 ## Usage
-It uses ZIM files that you can download from http://download.kiwix.org/
+It uses ZIM files that you can download from https://download.kiwix.org/
 
 You have to download them separately, store them in your filesystem, and manually select them after starting the application.
 It is unfortunately not technically possible to "remember" the selected ZIM file and open it automatically (the browsers refuse that for security reasons).
 
 ## Some technical details
 Technically, after reading an article from a ZIM file, there is a need to "inject" the dependencies (images, css etc). For compatibility reasons, there are several ways to do it :
-- the "jQuery" mode parses the DOM to find the HTML tags of these dependencies, and modifies them to put the Base64 content in it. It is compatible with any browser, but is slow and can use a lot of memory. It works well on Mediawiki-based content, but can miss some dependencies on some contents
+- the "jQuery" mode parses the DOM to find the HTML tags of these dependencies, and modifies them to put the Base64 content in it. It is compatible with any browser. It works well on Mediawiki-based content, but can miss some dependencies on some contents
 - the "ServiceWorker" mode uses a Service Worker to catch any HTTP request the page would send, and reply with content read from the ZIM file. It is a generic and much cleaner way than jQuery mode, but it does not work on all browsers. And ServiceWorkers are currently disabled by Mozilla in Firefox extensions
 
 ## Compatibility
@@ -46,9 +46,9 @@ The source code can be found at https://github.com/kiwix/kiwix-js
 Unit tests can be run by opening tests.html file on Firefox or Edge (or Chromium/Chrome with some tweaks).
 
 ## Public releases and nightly builds
-The browser extensions are distributed through the stores of each vendor (see links above). But the packages are also saved in http://download.kiwix.org/bin/browsers/ if necessary.
+The browser extensions are distributed through the stores of each vendor (see links above). But the packages are also saved in https://download.kiwix.org/bin/browsers/ if necessary.
 
-Some nightly builds are generated, and should only be used for testing purpose : http://download.kiwix.org/nightly/
+Some nightly builds are generated, and should only be used for testing purpose : https://download.kiwix.org/nightly/
 
 
 ## Previous versions

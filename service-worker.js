@@ -25,7 +25,6 @@
 
 self.addEventListener('install', function(event) {
     event.waitUntil(self.skipWaiting());
-    console.log("ServiceWorker installed");
 });
 
 self.addEventListener('activate', function(event) {
@@ -33,7 +32,6 @@ self.addEventListener('activate', function(event) {
     // without the need to reload the page.
     // See https://developer.mozilla.org/en-US/docs/Web/API/Clients/claim
     event.waitUntil(self.clients.claim());
-    console.log("ServiceWorker activated");
 });
 
 var regexpRemoveUrlParameters = new RegExp(/([^?#]+)[?#].*$/);
@@ -53,28 +51,21 @@ var regexpRemoveUrlParameters = new RegExp(/([^?#]+)[?#].*$/);
 function removeUrlParameters(url) {
     return url.replace(regexpRemoveUrlParameters, "$1");
 }
-    
-console.log("ServiceWorker startup");
 
 var outgoingMessagePort = null;
 var fetchCaptureEnabled = false;
 self.addEventListener('fetch', fetchEventListener);
-console.log('fetchEventListener set');
 
 self.addEventListener('message', function (event) {
     if (event.data.action === 'init') {
-        console.log('Init message received', event.data);
+        // On 'init' message, we initialize the outgoingMessagePort and enable the fetchEventListener
         outgoingMessagePort = event.ports[0];
-        console.log('outgoingMessagePort initialized', outgoingMessagePort);
         fetchCaptureEnabled = true;
-        console.log('fetchEventListener enabled');
     }
     if (event.data.action === 'disable') {
-        console.log('Disable message received');
+        // On 'disable' message, we delete the outgoingMessagePort and disable the fetchEventListener
         outgoingMessagePort = null;
-        console.log('outgoingMessagePort deleted');
         fetchCaptureEnabled = false;
-        console.log('fetchEventListener disabled');
     }
 });
 
@@ -84,17 +75,20 @@ var regexpJPEG = new RegExp(/\.jpe?g$/i);
 var regexpPNG = new RegExp(/\.png$/i);
 var regexpJS = new RegExp(/\.js/i);
 var regexpCSS = new RegExp(/\.css$/i);
+var regexpSVG = new RegExp(/\.svg$/i);
+var regexpWEBM = new RegExp(/\.webm$/i);
+var regexpMP4 = new RegExp(/\.mp4$/i);
+var regexpOGG = new RegExp(/\.og[mvg]$/i);
+var regexpVTT = new RegExp(/\.vtt$/i);
 
-// Pattern for ZIM file namespace - see http://www.openzim.org/wiki/ZIM_file_format#Namespaces
+// Pattern for ZIM file namespace - see https://wiki.openzim.org/wiki/ZIM_file_format#Namespaces
 var regexpZIMUrlWithNamespace = new RegExp(/(?:^|\/)([-ABIJMUVWX])\/(.+)/);
 
 function fetchEventListener(event) {
     if (fetchCaptureEnabled) {
-        console.log('ServiceWorker handling fetch event for : ' + event.request.url);
-
         if (regexpZIMUrlWithNamespace.test(event.request.url)) {
-
-            console.log('Asking app.js for a content', event.request.url);
+            // The ServiceWorker will handle this request
+            // Let's ask app.js for that content
             event.respondWith(new Promise(function(resolve, reject) {
                 var nameSpace;
                 var title;
@@ -104,41 +98,50 @@ function fetchEventListener(event) {
                 nameSpace = regexpResult[1];
                 title = regexpResult[2];
 
-                // The namespace defines the type of content. See http://www.openzim.org/wiki/ZIM_file_format#Namespaces
+                // The namespace defines the type of content. See https://wiki.openzim.org/wiki/ZIM_file_format#Namespaces
                 // TODO : read the contentType from the ZIM file instead of hard-coding it here
                 if (nameSpace === 'A') {
-                    console.log("It's an article : " + title);
-                    contentType = 'text/html';
+                    if (regexpVTT.test(title)) {
+                        // It's a subtitle
+                        contentType = 'text/vtt';
+                    }
+                    else {
+                        // It's an article
+                        contentType = 'text/html';
+                    }
                 }
                 else if (nameSpace === 'I' || nameSpace === 'J') {
-                    console.log("It's an image : " + title);
+                    // It's an image or another kind of media
                     if (regexpJPEG.test(title)) {
                         contentType = 'image/jpeg';
                     }
                     else if (regexpPNG.test(title)) {
                         contentType = 'image/png';
+                    } 
+                    else if (regexpSVG.test(title)) {
+                        contentType = 'image/svg+xml';
+                    }
+                    else if (regexpWEBM.test(title)) {
+                        contentType = 'video/webm';
+                    }
+                    else if (regexpMP4.test(title)) {
+                        contentType = 'video/mp4';
+                    }
+                    else if (regexpOGG.test(title)) {
+                        contentType = 'video/ogg';
                     }
                 }
                 else if (nameSpace === '-') {
-                    console.log("It's a layout dependency : " + title);
+                    // It's a layout dependency
                     if (regexpJS.test(title)) {
                         contentType = 'text/javascript';
-                        var responseInit = {
-                            status: 200,
-                            statusText: 'OK',
-                            headers: {
-                                'Content-Type': contentType
-                            }
-                        };
-
-                        var httpResponse = new Response(';', responseInit);
-
-                        // TODO : temporary before the backend actually sends a proper content
-                        resolve(httpResponse);
-                        return;
                     }
                     else if (regexpCSS.test(title)) {
                         contentType = 'text/css';
+                    }
+                    else if (regexpVTT.test(title)) {
+                        // It's a subtitle
+                        contentType = 'text/vtt';
                     }
                 }
 
@@ -151,31 +154,45 @@ function fetchEventListener(event) {
                 var messageChannel = new MessageChannel();
                 messageChannel.port1.onmessage = function(event) {
                     if (event.data.action === 'giveContent') {
-                        console.log('content message received for ' + titleWithNameSpace, event.data);
+                        // Content received from app.js
+                        var contentLength;
+                        var headers = new Headers ();
+                        if (event.data.content && event.data.content.byteLength) {
+                            contentLength = event.data.content.byteLength;
+                            headers.set('Content-Length', contentLength);
+                        }
+                        if (contentType) {
+                            headers.set('Content-Type', contentType);
+                        }
+                        // Test if the content is a video.
+                        // String.prototype.startsWith is not supported by IE11, but IE11 does not support service workers, so it's safe to use it here.
+                        // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/startsWith
+                        if (contentLength && contentLength >= 1 && contentType && contentType.startsWith('video/')) {
+                            // In case of a video, Chrome and Edge need these HTTP headers else seeking doesn't work
+                            // (even if we always send all the video content, not the requested range, until the backend supports it)
+                            headers.set('Accept-Ranges', 'bytes');
+                            headers.set('Content-Range', 'bytes 0-' + (contentLength-1) + '/' + contentLength);
+                        }
                         var responseInit = {
                             status: 200,
                             statusText: 'OK',
-                            headers: {
-                                'Content-Type': contentType
-                            }
+                            headers: headers
                         };
 
                         var httpResponse = new Response(event.data.content, responseInit);
 
-                        console.log('ServiceWorker responding to the HTTP request for ' + titleWithNameSpace + ' (size=' + event.data.content.length + ' octets)' , httpResponse);
+                        // Let's send the content back from the ServiceWorker
                         resolve(httpResponse);
                     }
                     else if (event.data.action === 'sendRedirect') {
                         resolve(Response.redirect(event.data.redirectUrl));
                     }
                     else {
-                        console.log('Invalid message received from app.js for ' + titleWithNameSpace, event.data);
+                        console.error('Invalid message received from app.js for ' + titleWithNameSpace, event.data);
                         reject(event.data);
                     }
                 };
-                console.log('Eventlistener added to listen for an answer to ' + titleWithNameSpace);
                 outgoingMessagePort.postMessage({'action': 'askForContent', 'title': titleWithNameSpace}, [messageChannel.port2]);
-                console.log('Message sent to app.js through outgoingMessagePort');
             }));
         }
         // If event.respondWith() isn't called because this wasn't a request that we want to handle,

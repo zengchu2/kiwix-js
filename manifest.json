@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
     "name": "Kiwix",
-    "version": "2.3-WIP",
+    "version": "2.5-WIP",
 
     "description": "Kiwix : offline Wikipedia reader",
     
@@ -38,6 +38,6 @@
     },
     
     "author": "mossroy",
-    "homepage_url": "http://www.kiwix.org",
+    "homepage_url": "https://www.kiwix.org",
     "offline_enabled": true
 }

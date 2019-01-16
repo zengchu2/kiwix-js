@@ -12,8 +12,8 @@ while getopts tdv: option; do
     esac
 done
 
-MAJOR_NUMERIC_VERSION="2.3"
-VERSION_TO_REPLACE="2\.3-WIP"
+MAJOR_NUMERIC_VERSION="2.5"
+VERSION_TO_REPLACE="2\.5-WIP"
 
 # Set the secret environment variables if available
 # The file set_secret_environment_variables.sh should not be commited for security reasons
@@ -78,8 +78,9 @@ scripts/package_ubuntu_touch_app.sh $DRYRUN $TAG -v $VERSION
 if [ "${DRYRUN}zz" == "zz" ]; then
     CURRENT_DATE=$(date +'%Y-%m-%d')
     # Upload the files on download.kiwix.org
-    echo "Uploading the files on http://download.kiwix.org/nightly/$CURRENT_DATE/"
-    scp -r -p -i scripts/travisci_builder_id_key build/* nightlybot@download.kiwix.org:/var/www/download.kiwix.org/nightly/$CURRENT_DATE
+    echo "Uploading the files on https://download.kiwix.org/nightly/$CURRENT_DATE/"
+    ssh -i scripts/travisci_builder_id_key ci@download.kiwix.org mkdir -p /data/download/nightly/$CURRENT_DATE
+    scp -r -p -i scripts/travisci_builder_id_key build/* ci@download.kiwix.org:/data/download/nightly/$CURRENT_DATE
 else
     echo "Skipping uploading the files, because it's a dryrun test"
 fi
