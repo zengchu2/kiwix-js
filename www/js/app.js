@@ -61,13 +61,16 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     params['hideActiveContentWarning'] = cookies.getItem('hideActiveContentWarning') === 'true';
     document.getElementById('hideActiveContentWarningCheck').checked = params.hideActiveContentWarning;
     
+    // Define globalDropZone (universal drop area) and configDropZone (highlighting area on Config page)
+    var globalDropZone = document.getElementById('search-article');
+    var configDropZone = document.getElementById('configuration');
+    
     /**
      * Resize the IFrame height, so that it fills the whole available height in the window
      */
     function resizeIFrame() {
         var height = $(window).outerHeight()
                 - $("#top").outerHeight(true)
-                - $("#articleListWithHeader").outerHeight(true)
                 // TODO : this 5 should be dynamically computed, and not hard-coded
                 - 5;
         $(".articleIFrame").css("height", height + "px");
@@ -78,6 +81,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     // Define behavior of HTML elements
     $('#searchArticles').on('click', function(e) {
         $("#welcomeText").hide();
+        $('.alert').hide();
         $("#searchingArticles").show();
         pushBrowserHistoryState(null, $('#prefix').val());
         searchDirEntriesFromPrefix($('#prefix').val());
@@ -89,10 +93,76 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         document.getElementById("searchArticles").click();
         return false;
     });
+    // Handle keyboard events in the prefix (article search) field
+    var keyPressHandled = false;
+    $('#prefix').on('keydown', function(e) {
+        // If user presses Escape...
+        // IE11 returns "Esc" and the other browsers "Escape"; regex below matches both
+        if (/^Esc/.test(e.key)) {
+            // Hide the article list
+            e.preventDefault();
+            e.stopPropagation();
+            $('#articleListWithHeader').hide();
+            $('#articleContent').focus();
+            keyPressHandled = true;
+        }
+        // Arrow-key selection code adapted from https://stackoverflow.com/a/14747926/9727685
+        // IE11 produces "Down" instead of "ArrowDown" and "Up" instead of "ArrowUp"
+        if (/^((Arrow)?Down|(Arrow)?Up|Enter)$/.test(e.key)) {
+            // User pressed Down arrow or Up arrow or Enter
+            e.preventDefault();
+            e.stopPropagation();
+            // This is needed to prevent processing in the keyup event : https://stackoverflow.com/questions/9951274
+            keyPressHandled = true;
+            var activeElement = document.querySelector("#articleList .hover") || document.querySelector("#articleList a");
+            if (!activeElement) return;
+            // If user presses Enter, read the dirEntry
+            if (/Enter/.test(e.key)) {
+                if (activeElement.classList.contains('hover')) {
+                    var dirEntryId = activeElement.getAttribute('dirEntryId');
+                    findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId);
+                    return;
+                }
+            }
+            // If user presses ArrowDown...
+            // (NB selection is limited to five possibilities by regex above)
+            if (/Down/.test(e.key)) {
+                if (activeElement.classList.contains('hover')) {
+                    activeElement.classList.remove('hover');
+                    activeElement = activeElement.nextElementSibling || activeElement;
+                    var nextElement = activeElement.nextElementSibling || activeElement;
+                    if (!uiUtil.isElementInView(nextElement, true)) nextElement.scrollIntoView(false);
+                }
+            }
+            // If user presses ArrowUp...
+            if (/Up/.test(e.key)) {
+                activeElement.classList.remove('hover');
+                activeElement = activeElement.previousElementSibling || activeElement;
+                var previousElement = activeElement.previousElementSibling || activeElement;
+                if (!uiUtil.isElementInView(previousElement, true)) previousElement.scrollIntoView();
+                if (previousElement === activeElement) document.getElementById('top').scrollIntoView();
+            }
+            activeElement.classList.add('hover');
+        }
+    });
+    // Search for titles as user types characters
     $('#prefix').on('keyup', function(e) {
         if (selectedArchive !== null && selectedArchive.isReady()) {
-            onKeyUpPrefix(e);
+            // Prevent processing by keyup event if we already handled the keypress in keydown event
+            if (keyPressHandled)
+                keyPressHandled = false;
+            else
+                onKeyUpPrefix(e);
         }
+    });
+    // Restore the search results if user goes back into prefix field
+    $('#prefix').on('focus', function(e) {
+        if ($('#prefix').val() !== '') 
+            $('#articleListWithHeader').show();
+    });
+    // Hide the search resutls if user moves out of prefix field
+    $('#prefix').on('blur', function() {
+        $('#articleListWithHeader').hide();
     });
     $("#btnRandomArticle").on("click", function(e) {
         $('#prefix').val("");
@@ -138,6 +208,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Show the selected content in the page
         $('#about').hide();
         $('#configuration').hide();
+        $('#navigationButtons').show();
         $('#formArticleSearch').show();
         $("#welcomeText").show();
         $('#articleContent').show();
@@ -166,6 +237,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Show the selected content in the page
         $('#about').hide();
         $('#configuration').show();
+        $('#navigationButtons').hide();
         $('#formArticleSearch').hide();
         $("#welcomeText").hide();
         $('#articleListWithHeader').hide();
@@ -186,6 +258,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Show the selected content in the page
         $('#about').show();
         $('#configuration').hide();
+        $('#navigationButtons').hide();
         $('#formArticleSearch').hide();
         $("#welcomeText").hide();
         $('#articleListWithHeader').hide();
@@ -576,17 +649,78 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * Displays the zone to select files from the archive
      */
     function displayFileSelect() {
-        $('#openLocalFiles').show();
-        $('#archiveFiles').on('change', setLocalArchiveFromFileSelect);
+        document.getElementById('openLocalFiles').style.display = 'block';
+        // Set the main drop zone
+        configDropZone.addEventListener('dragover', handleGlobalDragover);
+        configDropZone.addEventListener('dragleave', function(e) {
+            configDropZone.style.border = '';
+        });
+        // Also set a global drop zone (allows us to ensure Config is always displayed for the file drop)
+        globalDropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            if (configDropZone.style.display === 'none') document.getElementById('btnConfigure').click();
+            e.dataTransfer.dropEffect = 'link';
+        });
+        globalDropZone.addEventListener('drop', handleFileDrop);
+        // This handles use of the file picker
+        document.getElementById('archiveFiles').addEventListener('change', setLocalArchiveFromFileSelect);
     }
 
+    function handleGlobalDragover(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'link';
+        configDropZone.style.border = '3px dotted red';
+    }
+
+    function handleIframeDragover(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'link';
+        document.getElementById('btnConfigure').click();
+    }
+
+    function handleIframeDrop(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+
+    function handleFileDrop(packet) {
+        packet.stopPropagation();
+        packet.preventDefault();
+        configDropZone.style.border = '';
+        var files = packet.dataTransfer.files;
+        document.getElementById('openLocalFiles').style.display = 'none';
+        document.getElementById('downloadInstruction').style.display = 'none';
+        document.getElementById('selectorsDisplay').style.display = 'inline';
+        setLocalArchiveFromFileList(files);
+        // This clears the display of any previously picked archive in the file selector
+        document.getElementById('archiveFiles').value = null;
+    }
+
+    // Add event listener to link which allows user to show file selectors
+    document.getElementById('selectorsDisplayLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        document.getElementById('openLocalFiles').style.display = 'block';
+        document.getElementById('selectorsDisplay').style.display = 'none';
+    });
+
     function setLocalArchiveFromFileList(files) {
+        // Check for usable file types
+        for (var i = files.length; i--;) {
+            // DEV: you can support other file types by adding (e.g.) '|dat|idx' after 'zim\w{0,2}'
+            if (!/\.(?:zim\w{0,2})$/i.test(files[i].name)) {
+                alert("One or more files does not appear to be a ZIM file!");
+                return;
+            }
+        }
         resetCssCache();
         selectedArchive = zimArchiveLoader.loadArchiveFromFiles(files, function (archive) {
             // The archive is set : go back to home page to start searching
             $("#btnHome").click();
+            document.getElementById('downloadInstruction').style.display = 'none';
         });
     }
+
     /**
      * Sets the localArchive from the File selects populated by user
      */
@@ -704,12 +838,16 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         var listLength = dirEntryArray.length < MAX_SEARCH_RESULT_SIZE ? dirEntryArray.length : MAX_SEARCH_RESULT_SIZE;
         for (var i = 0; i < listLength; i++) {
             var dirEntry = dirEntryArray[i];
-            var title = dirEntry.title ? dirEntry.title : '[' + dirEntry.url + ']';
             articleListDivHtml += '<a href="#" dirEntryId="' + dirEntry.toStringId().replace(/'/g, '&apos;') +
-                '" class="list-group-item">' + title + '</a>';
+                '" class="list-group-item">' + dirEntry.getTitleOrUrl() + '</a>';
         }
         articleListDiv.html(articleListDivHtml);
-        $('#articleList a').on('click', handleTitleClick);
+        // We have to use mousedown below instead of click as otherwise the prefix blur event fires first 
+        // and prevents this event from firing; note that touch also triggers mousedown
+        $('#articleList a').on('mousedown', function (e) {
+            handleTitleClick(e);
+            return false;
+        });
         $('#searchingArticles').hide();
         $('#articleListWithHeader').show();
     }
@@ -722,7 +860,6 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     function handleTitleClick(event) {       
         var dirEntryId = event.target.getAttribute("dirEntryId");
         findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId);
-        var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
         return false;
     }
     
@@ -735,8 +872,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     function findDirEntryFromDirEntryIdAndLaunchArticleRead(dirEntryId) {
         if (selectedArchive.isReady()) {
             var dirEntry = selectedArchive.parseDirEntryId(dirEntryId);
-            // Remove focus from search field to hide keyboard
-            $("#searchArticles").focus();
+            // Remove focus from search field to hide keyboard and to allow navigation keys to be used
+            document.getElementById('articleContent').contentWindow.focus();
             $("#searchingArticles").show();
             if (dirEntry.isRedirect()) {
                 selectedArchive.resolveRedirect(dirEntry, readArticle);
@@ -751,12 +888,19 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
     /**
      * Read the article corresponding to the given dirEntry
-     * @param {DirEntry} dirEntry
+     * @param {DirEntry} dirEntry The directory entry of the article to read
      */
     function readArticle(dirEntry) {
         if (contentInjectionMode === 'serviceworker') {
             // In ServiceWorker mode, we simply set the iframe src.
             // (reading the backend is handled by the ServiceWorker itself)
+
+            // We will need the encoded URL on article load so that we can set the iframe's src correctly,
+            // but we must not encode the '/' character or else relative links may fail [kiwix-js #498]
+            var encodedUrl = dirEntry.url.replace(/[^/]+/g, function(matchedSubstring) {
+                return encodeURIComponent(matchedSubstring);
+            });
+            
             var iframeArticleContent = document.getElementById('articleContent');
             iframeArticleContent.onload = function() {
                 // The iframe is empty, show spinner on load of landing page
@@ -765,12 +909,23 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 $('#articleListHeaderMessage').empty();
                 $('#articleListWithHeader').hide();
                 $("#prefix").val("");
-                iframeArticleContent.onload = function () {
+                iframeArticleContent.onload = function() {
                     // The content is fully loaded by the browser : we can hide the spinner
-                    iframeArticleContent.onload = function () {};
                     $("#searchingArticles").hide();
+                    // Deflect drag-and-drop of ZIM file on the iframe to Config
+                    var doc = iframeArticleContent.contentDocument ? iframeArticleContent.contentDocument.documentElement : null;
+                    var docBody = doc ? doc.getElementsByTagName('body') : null;
+                    docBody = docBody ? docBody[0] : null;
+                    if (docBody) {
+                        docBody.addEventListener('dragover', handleIframeDragover);
+                        docBody.addEventListener('drop', handleIframeDrop);
+                    }
+                    if (iframeArticleContent.contentWindow) iframeArticleContent.contentWindow.onunload = function() {
+                        $("#searchingArticles").show();
+                    };
                 };
-                iframeArticleContent.src = dirEntry.namespace + "/" + encodeURIComponent(dirEntry.url);
+                // We put the ZIM filename as a prefix in the URL, so that browser caches are separate for each ZIM file
+                iframeArticleContent.src = "../" + selectedArchive._file._files[0].name + "/" + dirEntry.namespace + "/" + encodedUrl;
                 // Display the iframe content
                 $("#articleContent").show();
             };
@@ -793,7 +948,8 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     /**
      * Function that handles a message of the messageChannel.
      * It tries to read the content in the backend, and sends it back to the ServiceWorker
-     * @param {Event} event
+     * 
+     * @param {Event} event The event object of the message channel
      */
     function handleMessageChannelMessage(event) {
         if (event.data.error) {
@@ -805,33 +961,33 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 // The ServiceWorker asks for some content
                 var title = event.data.title;
                 var messagePort = event.ports[0];
-                var readFile = function(dirEntry) {
+                var readFile = function (dirEntry) {
                     if (dirEntry === null) {
                         console.error("Title " + title + " not found in archive.");
-                        messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': ''});
+                        messagePort.postMessage({ 'action': 'giveContent', 'title': title, 'content': '' });
                     } else if (dirEntry.isRedirect()) {
-                        selectedArchive.resolveRedirect(dirEntry, function(resolvedDirEntry) {
-                            var redirectURL = resolvedDirEntry.namespace + "/" +resolvedDirEntry.url;
+                        selectedArchive.resolveRedirect(dirEntry, function (resolvedDirEntry) {
+                            var redirectURL = resolvedDirEntry.namespace + "/" + resolvedDirEntry.url;
                             // Ask the ServiceWork to send an HTTP redirect to the browser.
                             // We could send the final content directly, but it is necessary to let the browser know in which directory it ends up.
                             // Else, if the redirect URL is in a different directory than the original URL,
                             // the relative links in the HTML content would fail. See #312
-                            messagePort.postMessage({'action':'sendRedirect', 'title':title, 'redirectUrl': redirectURL});
+                            messagePort.postMessage({ 'action': 'sendRedirect', 'title': title, 'redirectUrl': redirectURL });
                         });
                     } else {
                         // Let's read the content in the ZIM file
-                        selectedArchive.readBinaryFile(dirEntry, function(fileDirEntry, content) {
+                        selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
+                            var mimetype = fileDirEntry.getMimetype();
                             // Let's send the content to the ServiceWorker
-                            var message = {'action': 'giveContent', 'title' : title, 'content': content.buffer};
+                            var message = { 'action': 'giveContent', 'title': title, 'content': content.buffer, 'mimetype': mimetype };
                             messagePort.postMessage(message, [content.buffer]);
                         });
                     }
                 };
-                selectedArchive.getDirEntryByTitle(title).then(readFile).fail(function() {
-                    messagePort.postMessage({'action': 'giveContent', 'title' : title, 'content': new UInt8Array()});
+                selectedArchive.getDirEntryByTitle(title).then(readFile).fail(function () {
+                    messagePort.postMessage({ 'action': 'giveContent', 'title': title, 'content': new UInt8Array() });
                 });
-            }
-            else {
+            } else {
                 console.error("Invalid message received", event.data);
             }
         }
@@ -841,14 +997,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     // Pattern to find the path in a url
     var regexpPath = /^(.*\/)[^\/]+$/;
     // Pattern to find a ZIM URL (with its namespace) - see https://wiki.openzim.org/wiki/ZIM_file_format#Namespaces
-    var regexpZIMUrlWithNamespace = /(?:^|\/)([-ABIJMUVWX]\/.+)/;
-    // Regex below finds images, scripts, stylesheets and media sources with ZIM-type metadata and image namespaces [kiwix-js #378]
+    var regexpZIMUrlWithNamespace = /^[.\/]*([-ABIJMUVWX]\/.+)$/;
+    // Regex below finds images, scripts, stylesheets and tracks with ZIM-type metadata and image namespaces [kiwix-js #378]
     // It first searches for <img, <script, <link, etc., then scans forward to find, on a word boundary, either src=["']
     // or href=["'] (ignoring any extra whitespace), and it then tests the path of the URL with a non-capturing lookahead that
     // matches ZIM URLs with namespaces [-IJ] ('-' = metadata or 'I'/'J' = image). When the regex is used below, it will also
     // remove any relative or absolute path from ZIM-style URLs.
     // DEV: If you want to support more namespaces, add them to the END of the character set [-IJ] (not to the beginning) 
-    var regexpTagsWithZimUrl = /(<(?:img|script|link|video|audio|source|track)\b[^>]*?\s)(?:src|href)(\s*=\s*["'])(?:\.\.\/|\/)+(?=[-IJ]\/)/ig;
+    var regexpTagsWithZimUrl = /(<(?:img|script|link|track)\b[^>]*?\s)(?:src|href)(\s*=\s*["'])(?:\.\.\/|\/)+(?=[-IJ]\/)/ig;
     // Regex below tests the html of an article for active content [kiwix-js #466]
     // It inspects every <script> block in the html and matches in the following cases: 1) the script loads a UI application called app.js;
     // 2) the script block has inline content that does not contain "importScript()" or "toggleOpenSection" (these strings are used widely
@@ -856,6 +1012,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     // scripts used extensively in Stackexchange ZIMs). Note that the regex will match ReactJS <script type="text/html"> markup, which is
     // common in unsupported packaged UIs, e.g. PhET ZIMs.
     var regexpActiveContent = /<script\b(?:(?![^>]+src\b)|(?=[^>]+src\b=["'][^"']+?app\.js))(?!>[^<]+(?:importScript\(\)|toggleOpenSection))(?![^>]+type\s*=\s*["'](?:math\/|[^"']*?math))/i;
+    
+    // DEV: The regex below matches ZIM links (anchor hrefs) that should have the html5 "donwnload" attribute added to 
+    // the link. This is currently the case for epub and pdf files in Project Gutenberg ZIMs -- add any further types you need
+    // to support to this regex. The "zip" has been added here as an example of how to support further filetypes
+    var regexpDownloadLinks = /^.*?\.epub($|\?)|^.*?\.pdf($|\?)|^.*?\.zip($|\?)/i;
     
     // Cache for CSS styles contained in ZIM.
     // It significantly speeds up subsequent page display. See kiwix-js issue #335
@@ -878,18 +1039,15 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // This replacement also processes the URL to remove the path so that the URL is ready for subsequent jQuery functions
         htmlArticle = htmlArticle.replace(regexpTagsWithZimUrl, '$1data-kiwixurl$2');
 
-        // Compute base URL
-        var urlPath = regexpPath.test(dirEntry.url) ? urlPath = dirEntry.url.match(regexpPath)[1] : '';
-        var baseUrl = dirEntry.namespace + '/' + urlPath;
-
-        // Inject base tag into html
-        htmlArticle = htmlArticle.replace(/(<head[^>]*>\s*)/i, '$1<base href="' + baseUrl + '" />\r\n');
         // Extract any css classes from the html tag (they will be stripped when injected in iframe with .innerHTML)
         var htmlCSS = htmlArticle.match(/<html[^>]*class\s*=\s*["']\s*([^"']+)/i);
         htmlCSS = htmlCSS ? htmlCSS[1] : '';
         
         // Tell jQuery we're removing the iframe document: clears jQuery cache and prevents memory leaks [kiwix-js #361]
         $('#articleContent').contents().remove();
+
+        // Remove from DOM any download alert box that was activated in uiUtil.displayFileDownloadAlert function
+        $('#downloadAlert').alert('close');
         
         var iframeArticleContent = document.getElementById('articleContent');
         
@@ -899,14 +1057,33 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
             $('#articleListHeaderMessage').empty();
             $('#articleListWithHeader').hide();
             $("#prefix").val("");
+            
+            var iframeContentDocument = iframeArticleContent.contentDocument;
+            if (!iframeContentDocument && window.location.protocol === 'file:') {
+                alert("You seem to be opening kiwix-js with the file:// protocol, which is blocked by your browser for security reasons."
+                        + "\nThe easiest way to run it is to download and run it as a browser extension (from the vendor store)."
+                        + "\nElse you can open it through a web server : either through a local one (http://localhost/...) or through a remote one (but you need SSL : https://webserver/...)"
+                        + "\nAnother option is to force your browser to accept that (but you'll open a security breach) : on Chrome, you can start it with --allow-file-access-from-files command-line argument; on Firefox, you can set privacy.file_unique_origin to false in about:config");
+                return;
+            }
+            
             // Inject the new article's HTML into the iframe
-            var articleContent = iframeArticleContent.contentDocument.documentElement;
+            var articleContent = iframeContentDocument.documentElement;
             articleContent.innerHTML = htmlArticle;
-            // Add any missing classes stripped from the <html> tag
-            if (htmlCSS) articleContent.getElementsByTagName('body')[0].classList.add(htmlCSS);
+            
+            var docBody = articleContent.getElementsByTagName('body');
+            docBody = docBody ? docBody[0] : null;
+            if (docBody) {
+                // Add any missing classes stripped from the <html> tag
+                if (htmlCSS) docBody.classList.add(htmlCSS);
+                // Deflect drag-and-drop of ZIM file on the iframe to Config
+                docBody.addEventListener('dragover', handleIframeDragover);
+                docBody.addEventListener('drop', handleIframeDrop);
+            }
+
             // Allow back/forward in browser history
             pushBrowserHistoryState(dirEntry.namespace + "/" + dirEntry.url);
-            
+
             parseAnchorsJQuery();
             loadImagesJQuery();
             // JavaScript is currently disabled, so we need to make the browser interpret noscript tags
@@ -921,53 +1098,60 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         // Load the blank article to clear the iframe (NB iframe onload event runs *after* this)
         iframeArticleContent.src = "article.html";
 
+        // Calculate the current article's ZIM baseUrl to use when processing relative links
+        var baseUrl = dirEntry.namespace + '/' + dirEntry.url.replace(/[^/]+$/, '');
+
         function parseAnchorsJQuery() {
             var currentProtocol = location.protocol;
             var currentHost = location.host;
             // Percent-encode dirEntry.url and add regex escape character \ to the RegExp special characters - see https://www.regular-expressions.info/characters.html;
             // NB dirEntry.url can also contain path separator / in some ZIMs (Stackexchange). } and ] do not need to be escaped as they have no meaning on their own. 
             var escapedUrl = encodeURIComponent(dirEntry.url).replace(/([\\$^.|?*+\/()[{])/g, '\\$1');
-            // Pattern to match a local anchor in an href even if prefixed by escaped url
-            var regexpLocalAnchorHref = new RegExp('^(?:#|' + escapedUrl + '#)([^#]+$)');
-            $('#articleContent').contents().find('body').find('a').each(function () {
+            // Pattern to match a local anchor in an href even if prefixed by escaped url; will also match # on its own
+            var regexpLocalAnchorHref = new RegExp('^(?:#|' + escapedUrl + '#)([^#]*$)');
+            var iframe = iframeArticleContent.contentDocument;
+            Array.prototype.slice.call(iframe.querySelectorAll('a, area')).forEach(function (anchor) {
                 // Attempts to access any properties of 'this' with malformed URLs causes app crash in Edge/UWP [kiwix-js #430]
                 try {
-                    var testHref = this.href;
+                    var testHref = anchor.href;
                 } catch (err) {
-                    console.error("Malformed href caused error:" + err.message);
+                    console.error('Malformed href caused error:' + err.message);
                     return;
                 }
-                var href = this.getAttribute('href');
+                var href = anchor.getAttribute('href');
                 if (href === null || href === undefined) return;
-                // Compute current link's url (with its namespace), if applicable
-                // NB We need to access 'this.href' here because, unlike 'this.getAttribute("href")', it contains the fully qualified URL [kiwix-js #432]
-                var zimUrl = regexpZIMUrlWithNamespace.test(this.href) ? this.href.match(regexpZIMUrlWithNamespace)[1] : '';
                 if (href.length === 0) {
-                    // It's a link with an empty href, pointing to the current page.
-                    // Because of the base tag, we need to modify it
-                    $(this).on('click', function (e) {
-                        return false;
-                    });
+                    // It's a link with an empty href, pointing to the current page: do nothing.
                 } else if (regexpLocalAnchorHref.test(href)) {
-                    // It's an anchor link : we need to make it work with javascript
-                    // because of the base tag
-                    var anchorRef = href.replace(regexpLocalAnchorHref, '$1');
-                    $(this).on('click', function (e) {
-                        document.getElementById('articleContent').contentWindow.location.hash = anchorRef;
-                        return false;
-                    });
-                } else if (this.protocol !== currentProtocol ||
-                    this.host !== currentHost) {
+                    // It's a local anchor link : remove escapedUrl if any (see above)
+                    anchor.setAttribute('href', href.replace(/^[^#]*/, ''));
+                } else if (anchor.protocol !== currentProtocol ||
+                    anchor.host !== currentHost) {
                     // It's an external URL : we should open it in a new tab
-                    this.target = "_blank";
+                    anchor.target = '_blank';
                 } else {
-                    // It's a link to another article
-                    // Add an onclick event to go to this article
+                    // It's a link to an article or file in the ZIM
+                    var uriComponent = uiUtil.removeUrlParameters(href);
+                    var contentType;
+                    var downloadAttrValue;
+                    // Some file types need to be downloaded rather than displayed (e.g. *.epub)
+                    // The HTML download attribute can be Boolean or a string representing the specified filename for saving the file
+                    // For Boolean values, getAttribute can return any of the following: download="" download="download" download="true"
+                    // So we need to test hasAttribute first: see https://developer.mozilla.org/en-US/docs/Web/API/Element/getAttribute
+                    // However, we cannot rely on the download attribute having been set, so we also need to test for known download file types
+                    var isDownloadableLink = anchor.hasAttribute('download') || regexpDownloadLinks.test(href);
+                    if (isDownloadableLink) {
+                        downloadAttrValue = anchor.getAttribute('download');
+                        // Normalize the value to a true Boolean or a filename string or true if there is no download attribute
+                        downloadAttrValue = /^(download|true|\s*)$/i.test(downloadAttrValue) || downloadAttrValue || true;
+                        contentType = anchor.getAttribute('type');
+                    }
+                    // Add an onclick event to extract this article or file from the ZIM
                     // instead of following the link
-                    $(this).on('click', function (e) {
-                        var decodedURL = decodeURIComponent(zimUrl);
-                        goToArticle(decodedURL);
-                        return false;
+                    anchor.addEventListener('click', function (e) {
+                        var zimUrl = uiUtil.deriveZimUrlFromRelativeUrl(uriComponent, baseUrl);
+                        goToArticle(zimUrl, downloadAttrValue, contentType);
+                        e.preventDefault();
                     });
                 }
             });
@@ -980,16 +1164,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 var title = decodeURIComponent(imageUrl);
                 selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
                     selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
-                        // TODO : use the complete MIME-type of the image (as read from the ZIM file)
-                        var url = fileDirEntry.url;
-                        // Attempt to construct a generic mimetype first as a catchall
-                        var mimetype = url.match(/\.(\w{2,4})$/);
-                        mimetype = mimetype ? "image/" + mimetype[1].toLowerCase() : "image";
-                        // Then make more specific for known image types
-                        mimetype = /\.jpg$/i.test(url) ? "image/jpeg" : mimetype;
-                        mimetype = /\.tif$/i.test(url) ? "image/tiff" : mimetype;
-                        mimetype = /\.ico$/i.test(url) ? "image/x-icon" : mimetype;
-                        mimetype = /\.svg$/i.test(url) ? "image/svg+xml" : mimetype;
+                        var mimetype = dirEntry.getMimetype();
                         uiUtil.feedNodeWithBlob(image, 'src', content, mimetype);
                     });
                 }).fail(function (e) {
@@ -1094,29 +1269,20 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
         function insertMediaBlobsJQuery() {
             var iframe = iframeArticleContent.contentDocument;
-            Array.prototype.slice.call(iframe.querySelectorAll('video[data-kiwixurl], audio[data-kiwixurl], source[data-kiwixurl], track'))
+            Array.prototype.slice.call(iframe.querySelectorAll('video, audio, source, track'))
             .forEach(function(mediaSource) {
-                var source = mediaSource.dataset.kiwixurl;
-                if (!source && mediaSource.src) {
-                    // Some ZIMs list text tracks as a relative link within the directory containing the article
-                    source = regexpZIMUrlWithNamespace.test(mediaSource.src) ? mediaSource.src.match(regexpZIMUrlWithNamespace)[1] : source;
-                }
+                var source = mediaSource.getAttribute('src');
+                source = source ? uiUtil.deriveZimUrlFromRelativeUrl(source, baseUrl) : null;
+                // We have to exempt text tracks from using deriveZimUrlFromRelativeurl due to a bug in Firefox [kiwix-js #496]
+                source = source ? source : mediaSource.dataset.kiwixurl;
                 if (!source || !regexpZIMUrlWithNamespace.test(source)) {
-                    console.error('No usable media source was found!');
+                    if (source) console.error('No usable media source was found for: ' + source);
                     return;
                 }
                 var mediaElement = /audio|video/i.test(mediaSource.tagName) ? mediaSource : mediaSource.parentElement;
-                var mimeType = mediaSource.type;
-                // Check mimeType
-                if (!mimeType) {
-                    // Try to guess type from file extension
-                    var mediaType = mediaElement.tagName.toLowerCase();
-                    if (!/audio|video/i.test(mediaType)) mediaType = 'video';
-                    if (/track/i.test(mediaSource.tagName)) mediaType = 'text';
-                    mimeType = source.replace(/^.*\.([^.]+)$/, mediaType + '/$1');
-                }
                 selectedArchive.getDirEntryByTitle(decodeURIComponent(source)).then(function(dirEntry) {
                     return selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, mediaArray) {
+                        var mimeType = mediaSource.type ? mediaSource.type : dirEntry.getMimetype();
                         var blob = new Blob([mediaArray], { type: mimeType });
                         mediaSource.src = URL.createObjectURL(blob);
                         // In Firefox and Chromium it is necessary to re-register the inserted media source
@@ -1159,16 +1325,24 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
 
     /**
-     * Replace article content with the one of the given title
-     * @param {String} title
+     * Extracts the content of the given article title, or a downloadable file, from the ZIM
+     * 
+     * @param {String} title The path and filename to the article or file to be extracted
+     * @param {Boolean|String} download A Bolean value that will trigger download of title, or the filename that should
+     *     be used to save the file in local FS (in HTML5 spec, a string value for the download attribute is optional)
+     * @param {String} contentType The mimetype of the downloadable file, if known 
      */
-    function goToArticle(title) {
+    function goToArticle(title, download, contentType) {
         $("#searchingArticles").show();
-        title = uiUtil.removeUrlParameters(title);
         selectedArchive.getDirEntryByTitle(title).then(function(dirEntry) {
             if (dirEntry === null || dirEntry === undefined) {
                 $("#searchingArticles").hide();
                 alert("Article with title " + title + " not found in the archive");
+            } else if (download) {
+                selectedArchive.readBinaryFile(dirEntry, function (fileDirEntry, content) {
+                    var mimetype = contentType || fileDirEntry.getMimetype();
+                    uiUtil.displayFileDownloadAlert(title, download, contentType, content);
+                });
             } else {
                 params.isLandingPage = false;
                 $('#activeContent').alert('close');
