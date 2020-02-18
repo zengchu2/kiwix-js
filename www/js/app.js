@@ -950,7 +950,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
         if(!prefixDisplayedInSearchBar || (!testUrl && testUrl.startsWith(prefixDisplayedInSearchBar))) {
             console.debug("Nonempty dirEntryArray is not returned by latest findDirEntriesWithPrefix, early return");
             // Manually disable searchingArticles.
-	        $('#searchingArticles').hide();
+            $('#searchingArticles').hide();
             return;
         }
 
@@ -1043,7 +1043,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry The directory entry of the article to read
      */
     function readArticle(dirEntry) {
-	    // Only update for expectedArticleURLToBeDisplayed.
+        // Only update for expectedArticleURLToBeDisplayed.
         expectedArticleURLToBeDisplayed = dirEntry.namespace + "/" + dirEntry.url;
         // We must remove focus from UI elements in order to deselect whichever one was clicked (in both jQuery and SW modes),
         // but we should not do this when opening the landing page (or else one of the Unit Tests fails, at least on Chrome 58)
