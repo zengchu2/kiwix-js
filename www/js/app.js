@@ -945,13 +945,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      */
     function populateListOfArticles(dirEntryArray) {
         var prefixDisplayedInSearchBar = $('#prefix').val();
-		var testUrl = dirEntryArray.length > 0 ? dirEntryArray[0].url.toLowerCase() : null;
-		// Early return if dirEntryArray is not returned from previous search or the prefix displayed is empty.
+        var testUrl = dirEntryArray.length > 0 ? dirEntryArray[0].url.toLowerCase() : null;
+        // Early return if dirEntryArray is not returned from previous search or the prefix displayed is empty.
         if(!prefixDisplayedInSearchBar || (!testUrl && testUrl.startsWith(prefixDisplayedInSearchBar))) {
-			console.debug("Nonempty dirEntryArray is not returned by latest findDirEntriesWithPrefix, early return");
+            console.debug("Nonempty dirEntryArray is not returned by latest findDirEntriesWithPrefix, early return");
             // Manually disable searchingArticles.
 	        $('#searchingArticles').hide();
-			return;
+            return;
         }
 
         var articleListHeaderMessageDiv = $('#articleListHeaderMessage');
