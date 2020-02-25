@@ -1190,12 +1190,12 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * Display the the given HTML article in the web page,
      * and convert links to javascript calls
      * NB : in some error cases, the given title can be null, and the htmlArticle contains the error message
-     * @param {Object}   eventState The action to invoke this callback function.
+     * @param {Object}  originAction  The action to invoke this callback function.
      * @param {DirEntry} dirEntry
      * @param {String} htmlArticle
      */
-    function displayArticleContentInIframe(eventState, dirEntry, htmlArticle) {
-        if(! isThisCallbackExpectedToBePerformed(eventState)){
+    function displayArticleContentInIframe(originAction, dirEntry, htmlArticle) {
+        if(! isThisCallbackExpectedToBePerformed(originAction)){
             return;
         }		
         // Display Bootstrap warning alert if the landing page contains active content
