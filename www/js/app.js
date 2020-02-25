@@ -938,11 +938,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      */
     function searchDirEntriesFromPrefix(prefix) {
         if (selectedArchive !== null && selectedArchive.isReady()) {
-            var curState = updateLatestAsynAction("Search", prefix);
+            var curAction = updateLatestAsynAction("Search", prefix);
 
             $('#activeContent').hide();
             selectedArchive.findDirEntriesWithPrefix(prefix.trim(), MAX_SEARCH_RESULT_SIZE, function(archiveDirectories) {
-                populateListOfArticles(curState, archiveDirectories);
+                populateListOfArticles(curAction, archiveDirectories);
             });
         } else {
             $('#searchingArticles').hide();
@@ -957,11 +957,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
   
     /**
      * Display the list of articles with the given array of DirEntry
-     * @param {Object} eventState The action to invoke this callback function.
+     * @param {Object} originAction The action invoked this callback function.
      * @param {Array} dirEntryArray The array of dirEntries returned from the binary search
      */
-    function populateListOfArticles(eventState, dirEntryArray) {
-        if(! isThisCallbackExpectedToBePerformed(eventState)){
+    function populateListOfArticles(originAction, dirEntryArray) {
+        if(! isThisCallbackExpectedToBePerformed(originAction)){
             return;
         }
 
@@ -1035,12 +1035,12 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * Check whether the asynState equals the global variable latestAsynAction
+     * Check whether the origin action equals the latest action latestAsynAction
      * @param {Object} asynEvent The action invoked the parent asyn callback functions 
      */
     function isThisCallbackExpectedToBePerformed(asynEvent) {
         if (asynEvent.action != latestUserAsynAction.action || asynEvent.actionIdentifier != latestUserAsynAction.actionIdentifier) {
-            console.log("Result of asyn action : " + asynEvent.action + ":" + asynEvent.actionIdentifier + " won't be displayed \
+            console.debug("Result of asyn action : " + asynEvent.action + ":" + asynEvent.actionIdentifier + " won't be displayed \
             since the latest asyn action is:" + latestUserAsynAction.action + ":" + latestUserAsynAction.actionIdentifier);
             return false;
         }
@@ -1052,7 +1052,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry The directory entry of the article to read
      */
     function readArticle(dirEntry) {
-        var curState = updateLatestAsynAction("Read",  dirEntry.namespace + "/" + dirEntry.url);
+        var curAction = updateLatestAsynAction("Read",  dirEntry.namespace + "/" + dirEntry.url);
 
         // We must remove focus from UI elements in order to deselect whichever one was clicked (in both jQuery and SW modes),
         // but we should not do this when opening the landing page (or else one of the Unit Tests fails, at least on Chrome 58)
@@ -1107,7 +1107,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 // TODO: Investigate whether it is really an async issue or whether there is a rogue .hide() statement in the chain
                 $("#searchingArticles").show();
                 selectedArchive.readUtf8File(dirEntry, function (dirEntry, htmlArticle) {
-                    displayArticleContentInIframe(curState, dirEntry, htmlArticle);
+                    displayArticleContentInIframe(curAction, dirEntry, htmlArticle);
                 });
             }
         }
