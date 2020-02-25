@@ -82,7 +82,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     var globalDropZone = document.getElementById('search-article');
     var configDropZone = document.getElementById('configuration');
     
-    // Unique state to identify  latest asyn search or readarticle event only.
+    // Unique state to identify  latest asyn action that can result in false diaplyed.
     // actionIdentifier can be either the key/url for searching or the url of expected article to be displayed.
     var latestUserAsynAction = {"action": "", "actionIdentifier": ""};
     
