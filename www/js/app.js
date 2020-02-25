@@ -84,7 +84,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     
     // Unique state to identify  latest asyn search or readarticle event only.
     // actionIdentifier can be either the key/url for searching or the url of expected article to be displayed.
-    var latestAsynReadSearchEvent = {"action": "", "actionIdentifier": ""};
+    var latestUserAsynAction = {"action": "", "actionIdentifier": ""};
     
     /**
      * Resize the IFrame height, so that it fills the whole available height in the window
@@ -920,14 +920,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * Helper function to simply the update of latestAsynReadSearchEvent.
-     * @param {*} action : Either "Read" or "Search"
+     * Update latestUserAsynAction.
+     * @param {*} action : An action that can cause wrong dispalying due to race condition.
      * @param {*} actionIdentifier : The keyword used to perform action. Can be keyword for search or identifer for 
      * article to be displayed.
      */
-    function updateLatestAsynEvent(action, actionIdentifier){
-        latestAsynReadSearchEvent.action = action;
-        latestAsynReadSearchEvent.actionIdentifier = actionIdentifier;
+    function updateLatestAsynAction(action, actionIdentifier){
+        latestUserAsynAction.action = action;
+        latestUserAsynAction.actionIdentifier = actionIdentifier;
         return {"action": action, "actionIdentifier": actionIdentifier};
     }
 
@@ -938,7 +938,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      */
     function searchDirEntriesFromPrefix(prefix) {
         if (selectedArchive !== null && selectedArchive.isReady()) {
-            var curState = updateLatestAsynEvent("Search", prefix);
+            var curState = updateLatestAsynAction("Search", prefix);
 
             $('#activeContent').hide();
             selectedArchive.findDirEntriesWithPrefix(prefix.trim(), MAX_SEARCH_RESULT_SIZE, function(archiveDirectories) {
@@ -1035,13 +1035,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * Check whether the asynState equals the global variable latestAsynEvent
-     * @param {Object} asynEvent The action to invoke the parent asyn functions 
+     * Check whether the asynState equals the global variable latestAsynAction
+     * @param {Object} asynEvent The action invoked the parent asyn callback functions 
      */
     function isThisCallbackExpectedToBePerformed(asynEvent) {
-        if (asynEvent.action != latestAsynReadSearchEvent.action || asynEvent.actionIdentifier != latestAsynReadSearchEvent.actionIdentifier) {
+        if (asynEvent.action != latestUserAsynAction.action || asynEvent.actionIdentifier != latestUserAsynAction.actionIdentifier) {
             console.log("Result of asyn action : " + asynEvent.action + ":" + asynEvent.actionIdentifier + " won't be displayed \
-            since the latest asyn action is:" + latestAsynReadSearchEvent.action + ":" + latestAsynReadSearchEvent.actionIdentifier);
+            since the latest asyn action is:" + latestUserAsynAction.action + ":" + latestUserAsynAction.actionIdentifier);
             return false;
         }
         return true;
@@ -1052,7 +1052,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry The directory entry of the article to read
      */
     function readArticle(dirEntry) {
-        var curState = updateLatestAsynEvent("Read",  dirEntry.namespace + "/" + dirEntry.url);
+        var curState = updateLatestAsynAction("Read",  dirEntry.namespace + "/" + dirEntry.url);
 
         // We must remove focus from UI elements in order to deselect whichever one was clicked (in both jQuery and SW modes),
         // but we should not do this when opening the landing page (or else one of the Unit Tests fails, at least on Chrome 58)
