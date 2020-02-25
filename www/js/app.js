@@ -1036,11 +1036,11 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
 
     /**
      * Check whether the origin action equals the latest action latestAsynAction
-     * @param {Object} asynEvent The action invoked the parent asyn callback functions 
+     * @param {Object} originAction The action invoked the parent asyn callback functions 
      */
-    function isThisCallbackExpectedToBePerformed(asynEvent) {
-        if (asynEvent.action != latestUserAsynAction.action || asynEvent.actionIdentifier != latestUserAsynAction.actionIdentifier) {
-            console.debug("Result of asyn action : " + asynEvent.action + ":" + asynEvent.actionIdentifier + " won't be displayed \
+    function isThisCallbackExpectedToBePerformed(originAction) {
+        if (originAction.action != latestUserAsynAction.action || originAction.actionIdentifier != latestUserAsynAction.actionIdentifier) {
+            console.debug("Result of asyn action : " + originAction.action + ":" + originAction.actionIdentifier + " won't be displayed \
             since the latest asyn action is:" + latestUserAsynAction.action + ":" + latestUserAsynAction.actionIdentifier);
             return false;
         }
