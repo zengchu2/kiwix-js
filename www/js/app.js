@@ -82,9 +82,9 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     var globalDropZone = document.getElementById('search-article');
     var configDropZone = document.getElementById('configuration');
     
-    // Unique state to identify  latest asyn action that can result in false diaplyed.
+    // Unique state to identify  latest async action that can result in false diaplyed.
     // actionIdentifier can be either the key/url for searching or the url of expected article to be displayed.
-    var latestUserAsynAction = {"action": "", "actionIdentifier": ""};
+    var latestUserAsyncAction = {"action": "", "actionIdentifier": ""};
     
     /**
      * Resize the IFrame height, so that it fills the whole available height in the window
@@ -920,14 +920,14 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * Update latestUserAsynAction.
+     * Update latestUserAsyncAction.
      * @param {*} action : An action that can cause wrong dispalying due to race condition.
-     * @param {*} actionIdentifier : The keyword used to perform action. Can be keyword for search or identifer for 
+     * @param {*} actionIdentifier : The keyword used to perform action. Can be a keyword for search or an url for 
      * article to be displayed.
      */
-    function updateLatestAsynAction(action, actionIdentifier){
-        latestUserAsynAction.action = action;
-        latestUserAsynAction.actionIdentifier = actionIdentifier;
+    function updateLatestAsyncAction(action, actionIdentifier){
+        latestUserAsyncAction.action = action;
+        latestUserAsyncAction.actionIdentifier = actionIdentifier;
         return {"action": action, "actionIdentifier": actionIdentifier};
     }
 
@@ -938,7 +938,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      */
     function searchDirEntriesFromPrefix(prefix) {
         if (selectedArchive !== null && selectedArchive.isReady()) {
-            var curAction = updateLatestAsynAction("Search", prefix);
+            var curAction = updateLatestAsyncAction("Search", prefix);
 
             $('#activeContent').hide();
             selectedArchive.findDirEntriesWithPrefix(prefix.trim(), MAX_SEARCH_RESULT_SIZE, function(archiveDirectories) {
@@ -961,7 +961,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {Array} dirEntryArray The array of dirEntries returned from the binary search
      */
     function populateListOfArticles(originAction, dirEntryArray) {
-        if(! isThisCallbackExpectedToBePerformed(originAction)){
+        if(! isThisLastAction(originAction)){
             return;
         }
 
@@ -1035,13 +1035,13 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
     }
 
     /**
-     * Check whether the origin action equals the latest action latestAsynAction
-     * @param {Object} originAction The action invoked the parent asyn callback functions 
+     * Check whether the origin action equals the latest action latestAsyncAction
+     * @param {Object} originAction The action invoked the parent async callback functions 
      */
-    function isThisCallbackExpectedToBePerformed(originAction) {
-        if (originAction.action != latestUserAsynAction.action || originAction.actionIdentifier != latestUserAsynAction.actionIdentifier) {
-            console.debug("Result of asyn action : " + originAction.action + ":" + originAction.actionIdentifier + " won't be displayed \
-            since the latest asyn action is:" + latestUserAsynAction.action + ":" + latestUserAsynAction.actionIdentifier);
+    function isThisLastAction(originAction) {
+        if (originAction.action != latestUserAsyncAction.action || originAction.actionIdentifier != latestUserAsyncAction.actionIdentifier) {
+            console.debug("Result of async action : " + originAction.action + ":" + originAction.actionIdentifier + " won't be displayed \
+            since the latest async action is:" + latestUserAsyncAction.action + ":" + latestUserAsyncAction.actionIdentifier);
             return false;
         }
         return true;
@@ -1052,7 +1052,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {DirEntry} dirEntry The directory entry of the article to read
      */
     function readArticle(dirEntry) {
-        var curAction = updateLatestAsynAction("Read",  dirEntry.namespace + "/" + dirEntry.url);
+        var curAction = updateLatestAsyncAction("Read",  dirEntry.namespace + "/" + dirEntry.url);
 
         // We must remove focus from UI elements in order to deselect whichever one was clicked (in both jQuery and SW modes),
         // but we should not do this when opening the landing page (or else one of the Unit Tests fails, at least on Chrome 58)
@@ -1095,7 +1095,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
                 };
             };
 
-            if(! isDirEntryExpectedToBeDisplayed(dirEntry)){
+            if(! isThisLastAction(dirEntry)){
                 return;
             } 
 
@@ -1198,7 +1198,7 @@ define(['jquery', 'zimArchiveLoader', 'util', 'uiUtil', 'cookies','abstractFiles
      * @param {String} htmlArticle
      */
     function displayArticleContentInIframe(originAction, dirEntry, htmlArticle) {
-        if(! isThisCallbackExpectedToBePerformed(originAction)){
+        if(! isThisLastAction(originAction)){
             return;
         }		
         // Display Bootstrap warning alert if the landing page contains active content
